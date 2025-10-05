@@ -4,7 +4,17 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+env_logger = "0.11.8"
 glutin = "0.32.3"
 glutin-winit = "0.5.0"
+log = "0.4.28"
 raw-window-handle = "0.6.2"
 winit = "0.30.12"
+
+[build-dependencies]
+cfg_aliases = "0.2.1"
+gl_generator = "0.14.0"
+
+[[bin]]
+name = "helloWorld"
+path = "src/main.rs"
