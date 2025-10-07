@@ -1,4 +1,6 @@
-use crate::gl;
+use std::sync::Arc;
+
+use crate::gl::{self, Gles2};
 
 #[derive(Clone, Copy, Debug)]
 pub struct GlPosition {
@@ -17,6 +19,24 @@ impl GlPosition {
             w: 0.0,
         }
     }
+
+    pub fn sub(&self, other: &GlPosition) -> GlPosition {
+        GlPosition {
+            x: self.x - other.x,
+            y: self.y - other.y,
+            z: self.z - other.z,
+            w: self.w - other.w,
+        }
+    }
+
+    pub fn add(&self, other: &GlPosition) -> GlPosition {
+        GlPosition {
+            x: self.x + other.x,
+            y: self.y + other.y,
+            z: self.z + other.z,
+            w: self.w + other.w,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -24,4 +44,13 @@ pub struct GlColor {
     pub r: gl::types::GLfloat,
     pub g: gl::types::GLfloat,
     pub b: gl::types::GLfloat,
+}
+
+#[derive(Clone)]
+pub struct Shader {
+    pub program: gl::types::GLuint,
+    pub vao: gl::types::GLuint,
+    pub vbo: gl::types::GLuint,
+    pub tex: Option<gl::types::GLuint>,
+    pub gl_fns: Arc<Gles2>,
 }

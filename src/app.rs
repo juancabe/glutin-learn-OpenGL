@@ -24,6 +24,7 @@ use winit::{
 };
 
 use crate::entities::Entity;
+use crate::entities::dirt_square::{DirtSquare, Square};
 use crate::entities::hello_triangle::HelloTriangle;
 use crate::gl::{self};
 use crate::helpers::{GlColor, GlPosition};
@@ -120,8 +121,7 @@ impl ApplicationHandler for App {
         };
 
         // The context needs to be current for the Renderer to set up shaders and
-        // buffers. It also performs function loading, which needs a current context on
-        // WGL.
+        // buffers.
         let gl_context = self.gl_context.as_ref().unwrap();
         gl_context.make_current(&gl_surface).unwrap();
 
@@ -157,8 +157,13 @@ impl ApplicationHandler for App {
             )
         });
 
-        let mut entities: Vec<Box<dyn Entity>> =
-            vec![Box::new(HelloTriangle::new(vec![triangle_vertices]))];
+        let mut entities: Vec<Box<dyn Entity>> = vec![
+            Box::new(HelloTriangle::new(vec![triangle_vertices])),
+            Box::new(DirtSquare::new(vec![Square {
+                bottom_left: GlPosition::new_2d(-0.2, -0.2),
+                top_right: GlPosition::new_2d(0.2, 0.2),
+            }])),
+        ];
 
         for entity in entities.iter_mut() {
             entity.init(gl_fns.clone());

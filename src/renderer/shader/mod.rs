@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{ffi::CStr, sync::Arc, time::Duration};
 
 use crate::gl::{self, Gles2};
 
@@ -27,6 +27,16 @@ pub unsafe fn create_shader(
             std::ptr::null(),
         );
         gl.CompileShader(shader);
+        // print compile errors if any
+        let mut success: gl::types::GLint = 0;
+        gl.GetShaderiv(shader, gl::COMPILE_STATUS, &mut success as *mut i32);
+        if success == 0 {
+            let mut info_log = [0i8; 512];
+            gl.GetShaderInfoLog(shader, 512, std::ptr::null_mut(), &mut info_log as *mut i8);
+            let cstr = CStr::from_ptr(info_log.as_mut_ptr());
+            log::error!("Error compiling SHADER: {:?}", cstr.to_str());
+        }
+
         shader
     }
 }

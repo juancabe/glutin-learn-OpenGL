@@ -3,30 +3,22 @@ use std::{sync::Arc, time::Duration};
 use crate::{
     entities::Entity,
     gl::{self, Gles2},
-    helpers::{GlColor, GlPosition},
+    helpers::{GlColor, GlPosition, Shader},
     renderer::shader::{GlslPass, create_shader},
 };
-
-#[derive(Clone)]
-struct GlslPassData {
-    pub program: gl::types::GLuint,
-    pub vao: gl::types::GLuint,
-    pub vbo: gl::types::GLuint,
-    pub gl_fns: Arc<Gles2>,
-}
 
 type TriangleVertex = (GlPosition, GlColor);
 #[derive(Clone)]
 pub struct HelloTriangle {
-    vertices: Vec<[TriangleVertex; 3]>,
+    instances: Vec<[TriangleVertex; 3]>,
     last_second: u64,
-    glsl_pass: Option<GlslPassData>,
+    glsl_pass: Option<Shader>,
 }
 
 impl HelloTriangle {
-    pub fn new(vertices: Vec<[TriangleVertex; 3]>) -> HelloTriangle {
+    pub fn new(instances: Vec<[TriangleVertex; 3]>) -> HelloTriangle {
         Self {
-            vertices,
+            instances,
             last_second: 0,
             glsl_pass: None,
         }
@@ -34,17 +26,18 @@ impl HelloTriangle {
 
     fn apply_v_change_to_gpu(&self) {
         let vertex_data: Vec<f32> = self
-            .vertices
+            .instances
             .concat()
             .iter()
             .flat_map(|(p, c)| [p.x, p.y, c.r, c.g, c.b])
             .collect();
 
-        if let Some(GlslPassData {
+        if let Some(Shader {
             program: _,
             vao: _,
             gl_fns,
             vbo,
+            tex: _,
         }) = &self.glsl_pass
         {
             unsafe {
@@ -62,7 +55,7 @@ impl HelloTriangle {
     }
 
     fn rotate_left(&mut self) {
-        for vert in self.vertices.iter_mut() {
+        for vert in self.instances.iter_mut() {
             let mut colors = vert.map(|(_, c)| c);
             colors.rotate_left(1);
             vert[0].1 = colors[0];
@@ -75,7 +68,7 @@ impl HelloTriangle {
 
     fn draw_with_clear_color(
         &self,
-        glsl_data: &GlslPassData,
+        glsl_data: &Shader,
         red: gl::types::GLfloat,
         green: gl::types::GLfloat,
         blue: gl::types::GLfloat,
@@ -105,7 +98,7 @@ impl GlslPass for HelloTriangle {
         let mut vbo;
 
         let vertex_data: Vec<f32> = self
-            .vertices
+            .instances
             .clone()
             .concat()
             .into_iter()
@@ -165,10 +158,11 @@ impl GlslPass for HelloTriangle {
             gl_fns.EnableVertexAttribArray(color_attrib as gl::types::GLuint);
         }
 
-        self.glsl_pass = Some(GlslPassData {
+        self.glsl_pass = Some(Shader {
             program,
             vao,
             vbo,
+            tex: None,
             gl_fns,
         })
     }
