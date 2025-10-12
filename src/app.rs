@@ -31,7 +31,7 @@ use crate::gl::{self};
 use crate::helpers::{FpsCounter, GlPosition, Mat3D};
 use crate::renderer::shader::GlslPass;
 use crate::{GlDisplayCreationState, renderer::Renderer, window_attributes};
-use glutin::surface::{Surface, WindowSurface};
+use glutin::surface::{Surface, SwapInterval, WindowSurface};
 
 const DEFAULT_WINDOW_WIDTH: usize = 800;
 const DEFAULT_WINDOW_HEIGHT: usize = 600;
@@ -42,7 +42,6 @@ struct AppState {
     // raw-window-handle.
     window: Window,
     entities: Vec<Box<dyn Entity>>,
-    entities_transformations_3d: Mat3D,
 }
 
 pub struct App {
@@ -151,25 +150,27 @@ impl ApplicationHandler for App {
         });
 
         // Try setting vsync.
-        // if let Err(res) = gl_surface
-        //     .set_swap_interval(gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
-        // {
-        //     eprintln!("Error setting vsync: {res:?}");
-        // }
+        if let Err(res) = gl_surface
+            .set_swap_interval(gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
+        {
+            eprintln!("Error setting vsync: {res:?}");
+        }
 
-        let mut triangle_vertices = vec![];
+        let mut cubes = vec![];
+        let mut triangles = vec![];
 
-        for i in 0..30000 {
-            triangle_vertices.push((glam::Vec3::new(0.0, 0.0, -(i as f32)), 0.33f32));
+        for i in 0..1 {
+            cubes.push(GlPosition::new(i as f32 / 2.0, 0.0, 0.0));
+            triangles.push((glam::Vec3::new(i as f32 / 2.0, 0.5, 0.0), 0.33f32));
         }
 
         let mut entities: Vec<Box<dyn Entity>> = vec![
-            Box::new(HelloTriangle::new(triangle_vertices)),
-            Box::new(DirtSquare::new(vec![Square {
-                bottom_left: GlPosition::new(-0.5, -0.5, 0.0),
-                top_right: GlPosition::new(-0.3, -0.3, 0.0),
-            }])),
-            Box::new(DirtCube::new(vec![GlPosition::new(0.0, 0.0, 0.0)], 0.5)),
+            Box::new(HelloTriangle::new(triangles)),
+            // Box::new(DirtSquare::new(vec![Square {
+            //     bottom_left: GlPosition::new(-0.5, -0.5, 0.0),
+            //     top_right: GlPosition::new(-0.3, -0.3, 0.0),
+            // }])),
+            Box::new(DirtCube::new(cubes, 0.5)),
         ];
 
         let dimensions = self
@@ -191,7 +192,6 @@ impl ApplicationHandler for App {
                 .replace(AppState {
                     entities,
                     gl_surface,
-                    entities_transformations_3d,
                     window
                 })
                 .is_none()
@@ -234,7 +234,6 @@ impl ApplicationHandler for App {
                     gl_surface,
                     window: _,
                     entities,
-                    entities_transformations_3d: _,
                 }) = self.state.as_mut()
                 {
                     // TODO: Adapt mat3d
@@ -245,14 +244,8 @@ impl ApplicationHandler for App {
                         NonZeroU32::new(size.height).unwrap(),
                     );
 
-                    let renderer = self.renderer.as_ref().unwrap();
+                    let renderer = self.renderer.as_mut().unwrap();
                     renderer.resize(size.width as i32, size.height as i32);
-
-                    let dimensions = glam::Vec2::new(size.width as f32, size.height as f32);
-
-                    for entity in entities.iter_mut() {
-                        entity.update(None, Some(Mat3D::default_from_dimensions(&dimensions)));
-                    }
                 }
             }
             WindowEvent::CloseRequested
@@ -290,26 +283,31 @@ impl ApplicationHandler for App {
             gl_surface,
             window,
             entities,
-            entities_transformations_3d,
         }) = self.state.as_mut()
         {
+            let renderer = self.renderer.as_mut().unwrap();
+
             if let Some(fps) = self.fps_counter.tick() {
                 log::info!("FPS: {fps}");
             }
 
-            let mut mat3d = *entities_transformations_3d;
-            mat3d.model *= glam::Mat4::from_rotation_y(
+            let dimensions = renderer.get_window_dimensions();
+            let dimensions = glam::Vec2::new(dimensions.x as f32, dimensions.y as f32);
+
+            let mut mat3d = Mat3D::default_from_dimensions(&dimensions);
+            mat3d.view *= glam::Mat4::from_rotation_y(
                 (360.0
                     * (self.init.elapsed().as_secs_f32() - self.init.elapsed().as_secs() as f32))
                     .to_radians(),
-            ) * glam::Mat4::from_rotation_z(
-                (360.0
-                    * (self.init.elapsed().as_secs_f32() - self.init.elapsed().as_secs() as f32))
-                    .to_radians(),
-            );
+            )
+            // * glam::Mat4::from_rotation_z(
+            //     (360.0
+            //         * (self.init.elapsed().as_secs_f32() - self.init.elapsed().as_secs() as f32))
+            //         .to_radians(),
+            // )
+            ;
 
             let gl_context = self.gl_context.as_ref().unwrap();
-            let renderer = self.renderer.as_mut().unwrap();
 
             let renderer_refs = entities.iter_mut().map(|e| e.as_mut() as &mut dyn GlslPass);
             renderer.draw(renderer_refs, mat3d);

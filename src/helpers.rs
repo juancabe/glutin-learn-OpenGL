@@ -21,9 +21,10 @@ impl Mat3D {
         let ar = dimensions.x / dimensions.y;
 
         Mat3D {
-            model: glam::Mat4::from_rotation_x(15.0f32.to_radians()),
+            // model: glam::Mat4::from_rotation_x(15.0f32.to_radians()),
+            model: glam::Mat4::IDENTITY,
             view: glam::Mat4::from_translation(glam::Vec3::new(0.0f32, 0.0f32, -2.0f32)),
-            projection: glam::Mat4::perspective_rh_gl(45.0f32.to_radians(), ar, 0.1f32, 100.0f32),
+            projection: glam::Mat4::perspective_rh_gl(90.0f32.to_radians(), ar, 0.1f32, 100.0f32),
         }
     }
 

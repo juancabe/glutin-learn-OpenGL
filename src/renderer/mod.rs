@@ -1,5 +1,7 @@
 use std::{ffi::CStr, sync::Arc, time::Instant};
 
+use glam::USizeVec2;
+
 use crate::{
     gl::{self, Gles2},
     helpers::Mat3D,
@@ -53,7 +55,8 @@ impl Renderer {
         }
     }
 
-    pub fn resize(&self, width: i32, height: i32) {
+    pub fn resize(&mut self, width: i32, height: i32) {
+        self.window_dimensions = USizeVec2::new(width as usize, height as usize);
         unsafe {
             self.gl.Viewport(0, 0, width, height);
         }

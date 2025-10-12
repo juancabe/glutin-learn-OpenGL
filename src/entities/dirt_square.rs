@@ -204,10 +204,10 @@ impl GlslPass for DirtSquare {
             if let Some(old_mat) = shader.mat3d
                 && old_mat.projection == new_mat.projection
             {
-                log::info!("SetUniforms...");
+                log::debug!("SetUniforms...");
                 unsafe { new_mat.set_uniforms(&shader.gl_fns, shader.program) };
             } else {
-                log::info!("SetUniformsWithProjection...");
+                log::debug!("SetUniformsWithProjection...");
                 unsafe { new_mat.set_uniforms_with_projection(&shader.gl_fns, shader.program) };
             }
 
