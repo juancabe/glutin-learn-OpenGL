@@ -1,44 +1,10 @@
-use std::{
-    ffi::CStr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{ffi::CStr, sync::Arc, time::Instant};
 
 use crate::{
     gl::{self, Gles2},
+    helpers::Mat3D,
     renderer::shader::GlslPass,
 };
-
-struct FpsCounter {
-    last: Instant,
-    acc: Duration,
-    frames: u32,
-}
-
-impl FpsCounter {
-    fn new() -> Self {
-        Self {
-            last: Instant::now(),
-            acc: Duration::ZERO,
-            frames: 0,
-        }
-    }
-    fn tick(&mut self) -> Option<f64> {
-        let now = Instant::now();
-        let dt = now - self.last;
-        self.last = now;
-        self.acc += dt;
-        self.frames += 1;
-        if self.acc >= Duration::from_secs(1) {
-            let fps = self.frames as f64 / self.acc.as_secs_f64();
-            self.acc = Duration::ZERO;
-            self.frames = 0;
-            Some(fps)
-        } else {
-            None
-        }
-    }
-}
 
 pub mod shader;
 
@@ -46,7 +12,6 @@ pub struct Renderer {
     window_dimensions: glam::USizeVec2,
     creation: Instant,
     gl: Arc<gl::Gl>,
-    fps_counter: FpsCounter,
 }
 
 impl Renderer {
@@ -68,26 +33,22 @@ impl Renderer {
             window_dimensions,
             creation: Instant::now(),
             gl: gl_fns,
-            fps_counter: FpsCounter::new(),
         }
     }
 
-    pub fn draw<'a, I>(&mut self, objects: I)
+    pub fn draw<'a, I>(&mut self, objects: I, mat3d: Mat3D)
     where
         I: Iterator<Item = &'a mut dyn GlslPass>,
     {
         let dt = self.creation.elapsed();
 
-        if let Some(fps) = self.fps_counter.tick() {
-            log::info!("FPS: {fps}");
-        }
-
         unsafe {
             self.gl.ClearColor(0.1, 0.1, 0.1, 1.0);
             self.gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
+
         for obj in objects {
-            obj.update(Some(&dt), None);
+            obj.update(Some(&dt), Some(mat3d));
             obj.draw();
         }
     }

@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use crate::gl::{self, Gles2};
 
@@ -18,8 +21,7 @@ impl Mat3D {
         let ar = dimensions.x / dimensions.y;
 
         Mat3D {
-            model: glam::Mat4::from_rotation_x(15.0f32.to_radians())
-                * glam::Mat4::from_rotation_y(15.0f32.to_radians()),
+            model: glam::Mat4::from_rotation_x(15.0f32.to_radians()),
             view: glam::Mat4::from_translation(glam::Vec3::new(0.0f32, 0.0f32, -2.0f32)),
             projection: glam::Mat4::perspective_rh_gl(45.0f32.to_radians(), ar, 0.1f32, 100.0f32),
         }
@@ -64,4 +66,38 @@ pub struct Shader {
     pub tex: Option<gl::types::GLuint>,
     pub mat3d: Option<Mat3D>,
     pub gl_fns: Arc<Gles2>,
+}
+
+pub struct FpsCounter {
+    last: Instant,
+    acc: Duration,
+    frames: u32,
+}
+
+impl FpsCounter {
+    pub fn tick(&mut self) -> Option<f64> {
+        let now = Instant::now();
+        let dt = now - self.last;
+        self.last = now;
+        self.acc += dt;
+        self.frames += 1;
+        if self.acc >= Duration::from_secs(1) {
+            let fps = self.frames as f64 / self.acc.as_secs_f64();
+            self.acc = Duration::ZERO;
+            self.frames = 0;
+            Some(fps)
+        } else {
+            None
+        }
+    }
+}
+
+impl Default for FpsCounter {
+    fn default() -> Self {
+        Self {
+            last: Instant::now(),
+            acc: Duration::ZERO,
+            frames: 0,
+        }
+    }
 }

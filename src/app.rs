@@ -5,6 +5,7 @@ use glutin_winit::GlWindow;
 use raw_window_handle::HasWindowHandle;
 use std::ffi::CString;
 use std::sync::Arc;
+use std::time::Instant;
 use std::vec;
 use std::{error::Error, num::NonZeroU32};
 use winit::window::Window;
@@ -13,7 +14,6 @@ use glutin::{
     config::{Config, ConfigTemplateBuilder},
     context::PossiblyCurrentContext,
     prelude::*,
-    surface::SwapInterval,
 };
 use glutin_winit::DisplayBuilder;
 use winit::{
@@ -24,10 +24,11 @@ use winit::{
 };
 
 use crate::entities::Entity;
+use crate::entities::dirt_cube::DirtCube;
 use crate::entities::dirt_square::{DirtSquare, Square};
 use crate::entities::hello_triangle::HelloTriangle;
 use crate::gl::{self};
-use crate::helpers::{GlPosition, Mat3D};
+use crate::helpers::{FpsCounter, GlPosition, Mat3D};
 use crate::renderer::shader::GlslPass;
 use crate::{GlDisplayCreationState, renderer::Renderer, window_attributes};
 use glutin::surface::{Surface, WindowSurface};
@@ -45,10 +46,12 @@ struct AppState {
 }
 
 pub struct App {
+    init: Instant,
     template: ConfigTemplateBuilder,
     renderer: Option<Renderer>,
     // NOTE: `AppState` carries the `Window`, thus it should be dropped after everything else.
     state: Option<AppState>,
+    fps_counter: FpsCounter,
     gl_context: Option<PossiblyCurrentContext>,
     gl_display: GlDisplayCreationState,
     pub exit_state: Result<(), Box<dyn Error>>,
@@ -57,9 +60,11 @@ pub struct App {
 impl App {
     pub fn new(template: ConfigTemplateBuilder, display_builder: DisplayBuilder) -> Self {
         Self {
+            init: Instant::now(),
             template,
             gl_display: GlDisplayCreationState::Builder(display_builder),
             exit_state: Ok(()),
+            fps_counter: FpsCounter::default(),
             gl_context: None,
             state: None,
             renderer: None,
@@ -160,16 +165,11 @@ impl ApplicationHandler for App {
 
         let mut entities: Vec<Box<dyn Entity>> = vec![
             Box::new(HelloTriangle::new(triangle_vertices)),
-            Box::new(DirtSquare::new(vec![
-                Square {
-                    bottom_left: GlPosition::new(-0.2, -0.2, 0.0),
-                    top_right: GlPosition::new(0.2, 0.2, 0.0),
-                },
-                Square {
-                    bottom_left: GlPosition::new(-0.5, -0.5, 0.0),
-                    top_right: GlPosition::new(-0.3, -0.3, 0.0),
-                },
-            ])),
+            Box::new(DirtSquare::new(vec![Square {
+                bottom_left: GlPosition::new(-0.5, -0.5, 0.0),
+                top_right: GlPosition::new(-0.3, -0.3, 0.0),
+            }])),
+            Box::new(DirtCube::new(vec![GlPosition::new(0.0, 0.0, 0.0)], 0.5)),
         ];
 
         let dimensions = self
@@ -290,14 +290,29 @@ impl ApplicationHandler for App {
             gl_surface,
             window,
             entities,
-            entities_transformations_3d: _,
+            entities_transformations_3d,
         }) = self.state.as_mut()
         {
+            if let Some(fps) = self.fps_counter.tick() {
+                log::info!("FPS: {fps}");
+            }
+
+            let mut mat3d = *entities_transformations_3d;
+            mat3d.model *= glam::Mat4::from_rotation_y(
+                (360.0
+                    * (self.init.elapsed().as_secs_f32() - self.init.elapsed().as_secs() as f32))
+                    .to_radians(),
+            ) * glam::Mat4::from_rotation_z(
+                (360.0
+                    * (self.init.elapsed().as_secs_f32() - self.init.elapsed().as_secs() as f32))
+                    .to_radians(),
+            );
+
             let gl_context = self.gl_context.as_ref().unwrap();
             let renderer = self.renderer.as_mut().unwrap();
 
             let renderer_refs = entities.iter_mut().map(|e| e.as_mut() as &mut dyn GlslPass);
-            renderer.draw(renderer_refs);
+            renderer.draw(renderer_refs, mat3d);
 
             window.request_redraw();
 

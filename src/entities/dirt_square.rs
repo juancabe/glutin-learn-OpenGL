@@ -12,13 +12,54 @@ pub struct Square {
 }
 
 impl Square {
+    // pub fn as_vertex_stride(&self) -> [GlPosition; 4] {
+    //     [
+    //         self.bottom_left,
+    //         GlPosition::new(self.bottom_left.x, self.top_right.y, self.top_right.z),
+    //         GlPosition::new(self.top_right.x, self.bottom_left.y, self.bottom_left.z),
+    //         self.top_right,
+    //     ]
+    // }
+
     pub fn as_vertex_stride(&self) -> [GlPosition; 4] {
-        [
-            self.bottom_left,
-            GlPosition::new(self.bottom_left.x, self.top_right.y, 0.0f32),
-            GlPosition::new(self.top_right.x, self.bottom_left.y, 0.0f32),
-            self.top_right,
-        ]
+        let (minx, maxx) = (
+            self.bottom_left.x.min(self.top_right.x),
+            self.bottom_left.x.max(self.top_right.x),
+        );
+        let (miny, maxy) = (
+            self.bottom_left.y.min(self.top_right.y),
+            self.bottom_left.y.max(self.top_right.y),
+        );
+        let (minz, maxz) = (
+            self.bottom_left.z.min(self.top_right.z),
+            self.bottom_left.z.max(self.top_right.z),
+        );
+
+        if minx == maxx {
+            // x = const (left/right). Strip order: (y-,z-), (y+,z-), (y-,z+), (y+,z+)
+            [
+                GlPosition::new(minx, miny, minz),
+                GlPosition::new(minx, maxy, minz),
+                GlPosition::new(minx, miny, maxz),
+                GlPosition::new(minx, maxy, maxz),
+            ]
+        } else if miny == maxy {
+            // y = const (top/bottom). Vary x,z.
+            [
+                GlPosition::new(minx, miny, minz),
+                GlPosition::new(minx, miny, maxz),
+                GlPosition::new(maxx, miny, minz),
+                GlPosition::new(maxx, miny, maxz),
+            ]
+        } else {
+            // z = const (front/back). Vary x,y.
+            [
+                GlPosition::new(minx, miny, maxz),
+                GlPosition::new(minx, maxy, maxz),
+                GlPosition::new(maxx, miny, maxz),
+                GlPosition::new(maxx, maxy, maxz),
+            ]
+        }
     }
 
     pub fn as_vertex_stride_w_tex_mapping(&self) -> [(GlPosition, GlPosition); 4] {
