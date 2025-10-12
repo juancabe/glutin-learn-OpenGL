@@ -27,10 +27,13 @@ use crate::entities::Entity;
 use crate::entities::dirt_square::{DirtSquare, Square};
 use crate::entities::hello_triangle::HelloTriangle;
 use crate::gl::{self};
-use crate::helpers::{GlColor, GlPosition};
+use crate::helpers::{GlPosition, Mat3D};
 use crate::renderer::shader::GlslPass;
 use crate::{GlDisplayCreationState, renderer::Renderer, window_attributes};
 use glutin::surface::{Surface, WindowSurface};
+
+const DEFAULT_WINDOW_WIDTH: usize = 800;
+const DEFAULT_WINDOW_HEIGHT: usize = 600;
 
 struct AppState {
     gl_surface: Surface<WindowSurface>,
@@ -38,6 +41,7 @@ struct AppState {
     // raw-window-handle.
     window: Window,
     entities: Vec<Box<dyn Entity>>,
+    entities_transformations_3d: Mat3D,
 }
 
 pub struct App {
@@ -134,39 +138,52 @@ impl ApplicationHandler for App {
         });
         let gl_fns = Arc::new(gl_fns);
 
-        self.renderer
-            .get_or_insert_with(|| Renderer::new(gl_fns.clone()));
-
-        // Try setting vsync.
-        if let Err(res) = gl_surface
-            .set_swap_interval(gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
-        {
-            eprintln!("Error setting vsync: {res:?}");
-        }
-
-        #[rustfmt::skip]
-        let triangle_vertices = [
-            ((-0.5, -0.5), (1.0, 0.0, 0.0)),
-            (( 0.0,  0.5), (0.0, 1.0, 0.0)),
-            (( 0.5, -0.5), (0.0, 0.0, 1.0)),
-        ]
-        .map(|((x, y), (r, g, b))| {
-            (
-                GlPosition::new_2d(x, y),
-                GlColor { r, g, b },
+        self.renderer.get_or_insert_with(|| {
+            Renderer::new(
+                gl_fns.clone(),
+                glam::USizeVec2::new(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT),
             )
         });
 
+        // Try setting vsync.
+        // if let Err(res) = gl_surface
+        //     .set_swap_interval(gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
+        // {
+        //     eprintln!("Error setting vsync: {res:?}");
+        // }
+
+        let mut triangle_vertices = vec![];
+
+        for i in 0..30000 {
+            triangle_vertices.push((glam::Vec3::new(0.0, 0.0, -(i as f32)), 0.33f32));
+        }
+
         let mut entities: Vec<Box<dyn Entity>> = vec![
-            Box::new(HelloTriangle::new(vec![triangle_vertices])),
-            Box::new(DirtSquare::new(vec![Square {
-                bottom_left: GlPosition::new_2d(-0.2, -0.2),
-                top_right: GlPosition::new_2d(0.2, 0.2),
-            }])),
+            Box::new(HelloTriangle::new(triangle_vertices)),
+            Box::new(DirtSquare::new(vec![
+                Square {
+                    bottom_left: GlPosition::new(-0.2, -0.2, 0.0),
+                    top_right: GlPosition::new(0.2, 0.2, 0.0),
+                },
+                Square {
+                    bottom_left: GlPosition::new(-0.5, -0.5, 0.0),
+                    top_right: GlPosition::new(-0.3, -0.3, 0.0),
+                },
+            ])),
         ];
 
+        let dimensions = self
+            .renderer
+            .as_ref()
+            .expect("Set before")
+            .get_window_dimensions();
+
+        let dimensions = glam::Vec2::new(dimensions.x as f32, dimensions.y as f32);
+
+        let entities_transformations_3d = Mat3D::default_from_dimensions(&dimensions);
+
         for entity in entities.iter_mut() {
-            entity.init(gl_fns.clone());
+            entity.init(gl_fns.clone(), Some(entities_transformations_3d));
         }
 
         assert!(
@@ -174,6 +191,7 @@ impl ApplicationHandler for App {
                 .replace(AppState {
                     entities,
                     gl_surface,
+                    entities_transformations_3d,
                     window
                 })
                 .is_none()
@@ -215,9 +233,11 @@ impl ApplicationHandler for App {
                 if let Some(AppState {
                     gl_surface,
                     window: _,
-                    entities: _,
-                }) = self.state.as_ref()
+                    entities,
+                    entities_transformations_3d: _,
+                }) = self.state.as_mut()
                 {
+                    // TODO: Adapt mat3d
                     let gl_context = self.gl_context.as_ref().unwrap();
                     gl_surface.resize(
                         gl_context,
@@ -227,6 +247,12 @@ impl ApplicationHandler for App {
 
                     let renderer = self.renderer.as_ref().unwrap();
                     renderer.resize(size.width as i32, size.height as i32);
+
+                    let dimensions = glam::Vec2::new(size.width as f32, size.height as f32);
+
+                    for entity in entities.iter_mut() {
+                        entity.update(None, Some(Mat3D::default_from_dimensions(&dimensions)));
+                    }
                 }
             }
             WindowEvent::CloseRequested
@@ -264,6 +290,7 @@ impl ApplicationHandler for App {
             gl_surface,
             window,
             entities,
+            entities_transformations_3d: _,
         }) = self.state.as_mut()
         {
             let gl_context = self.gl_context.as_ref().unwrap();

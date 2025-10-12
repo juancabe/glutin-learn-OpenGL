@@ -48,6 +48,7 @@ fn window_attributes() -> WindowAttributes {
         .with_title("Glutin triangle gradient example (press Escape to exit)")
 }
 
+#[allow(clippy::large_enum_variant)]
 enum GlDisplayCreationState {
     /// The display was not build yet.
     Builder(DisplayBuilder),

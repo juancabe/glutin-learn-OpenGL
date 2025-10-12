@@ -1,18 +1,23 @@
 use std::{ffi::CStr, sync::Arc, time::Duration};
 
-use crate::gl::{self, Gles2};
+use crate::{
+    gl::{self, Gles2},
+    helpers::Mat3D,
+};
 
 pub trait GlslPass {
     // Create GPU resources; should be idempotent or guarded by internal state.
-    fn init(&mut self, gl_fns: Arc<Gles2>);
+    fn init(&mut self, gl_fns: Arc<Gles2>, mat3d: Option<Mat3D>);
 
     // Per-frame updates (uniforms, buffers, animations).
-    fn update(&mut self, dt: &Duration);
+    fn update(&mut self, dt: Option<&Duration>, mat3d: Option<Mat3D>);
 
     // Issue draw calls. Caller ensures framebuffer and other global state.
     fn draw(&self);
 }
 
+/// # Safety
+/// its doing ffi
 pub unsafe fn create_shader(
     gl: &gl::Gl,
     shader: gl::types::GLenum,

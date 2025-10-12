@@ -1,7 +1,7 @@
 use crate::{
     entities::Entity,
     gl,
-    helpers::{GlPosition, Shader},
+    helpers::{GlPosition, Mat3D, Shader},
     renderer::shader::{GlslPass, create_shader},
 };
 
@@ -15,8 +15,8 @@ impl Square {
     pub fn as_vertex_stride(&self) -> [GlPosition; 4] {
         [
             self.bottom_left,
-            GlPosition::new_2d(self.bottom_left.x, self.top_right.y),
-            GlPosition::new_2d(self.top_right.x, self.bottom_left.y),
+            GlPosition::new(self.bottom_left.x, self.top_right.y, 0.0f32),
+            GlPosition::new(self.top_right.x, self.bottom_left.y, 0.0f32),
             self.top_right,
         ]
     }
@@ -24,10 +24,10 @@ impl Square {
     pub fn as_vertex_stride_w_tex_mapping(&self) -> [(GlPosition, GlPosition); 4] {
         let [bl, tl, br, tr] = self.as_vertex_stride();
         [
-            (bl, GlPosition::new_2d(0.0, 0.0)),
-            (tl, GlPosition::new_2d(0.0, 1.0)),
-            (br, GlPosition::new_2d(1.0, 0.0)),
-            (tr, GlPosition::new_2d(1.0, 1.0)),
+            (bl, GlPosition::new(0.0, 0.0, 0.0f32)),
+            (tl, GlPosition::new(0.0, 1.0, 0.0f32)),
+            (br, GlPosition::new(1.0, 0.0, 0.0f32)),
+            (tr, GlPosition::new(1.0, 1.0, 0.0f32)),
         ]
     }
 }
@@ -47,7 +47,7 @@ impl DirtSquare {
 }
 
 impl GlslPass for DirtSquare {
-    fn init(&mut self, gl_fns: std::sync::Arc<crate::gl::Gles2>) {
+    fn init(&mut self, gl_fns: std::sync::Arc<crate::gl::Gles2>, mat3d: Option<Mat3D>) {
         let image = image::ImageReader::open("./assets/dirt.webp")
             .expect("assets/dirt.webp should be readable")
             .decode()
@@ -61,7 +61,7 @@ impl GlslPass for DirtSquare {
             .instances
             .iter()
             .flat_map(|sq| sq.as_vertex_stride_w_tex_mapping())
-            .flat_map(|(p, t)| [p.x, p.y, t.x, t.y])
+            .flat_map(|(p, t)| [p.x, p.y, p.z, t.x, t.y])
             .collect();
 
         let mut tex;
@@ -82,6 +82,8 @@ impl GlslPass for DirtSquare {
             gl_fns.DeleteShader(vertex_shader);
             gl_fns.DeleteShader(fragment_shader);
 
+            gl_fns.UseProgram(program);
+
             vao = std::mem::zeroed();
             gl_fns.GenVertexArrays(1, &mut vao);
             gl_fns.BindVertexArray(vao);
@@ -97,13 +99,17 @@ impl GlslPass for DirtSquare {
                 gl::STATIC_DRAW,
             );
 
+            if let Some(trans_uniforms) = mat3d {
+                trans_uniforms.set_uniforms_with_projection(&gl_fns, program);
+            }
+
             let pos_attrib = gl_fns.GetAttribLocation(program, c"position".as_ptr() as *const _);
             gl_fns.VertexAttribPointer(
                 pos_attrib as gl::types::GLuint,
-                2,
+                3,
                 gl::FLOAT,
                 0,
-                4 * std::mem::size_of::<f32>() as gl::types::GLsizei,
+                5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
                 std::ptr::null(),
             );
             let tex_attrib =
@@ -113,8 +119,8 @@ impl GlslPass for DirtSquare {
                 2,
                 gl::FLOAT,
                 0,
-                4 * std::mem::size_of::<f32>() as gl::types::GLsizei,
-                (2 * std::mem::size_of::<f32>()) as *const () as *const _,
+                5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
+                (3 * std::mem::size_of::<f32>()) as *const () as *const _,
             );
 
             gl_fns.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
@@ -144,16 +150,33 @@ impl GlslPass for DirtSquare {
             vao,
             vbo,
             gl_fns,
+            mat3d,
             tex: Some(tex),
         })
     }
 
-    fn update(&mut self, _dt: &std::time::Duration) {
-        ()
+    fn update(&mut self, _dt: Option<&std::time::Duration>, mat3d: Option<Mat3D>) {
+        if let Some(shader) = &mut self.glsl_pass
+            && let Some(new_mat) = mat3d
+        {
+            unsafe { shader.gl_fns.UseProgram(shader.program) };
+            if let Some(old_mat) = shader.mat3d
+                && old_mat.projection == new_mat.projection
+            {
+                log::info!("SetUniforms...");
+                unsafe { new_mat.set_uniforms(&shader.gl_fns, shader.program) };
+            } else {
+                log::info!("SetUniformsWithProjection...");
+                unsafe { new_mat.set_uniforms_with_projection(&shader.gl_fns, shader.program) };
+            }
+
+            shader.mat3d = mat3d;
+        }
     }
 
     fn draw(&self) {
         if let Some(glsl_pass) = &self.glsl_pass {
+            log::debug!("Calling draw on DirtSquare");
             let gl = &glsl_pass.gl_fns;
             let program = glsl_pass.program;
             let vao = glsl_pass.vao;
@@ -167,7 +190,11 @@ impl GlslPass for DirtSquare {
                 gl.BindVertexArray(vao);
                 gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
 
-                gl.DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+                // NOTE: This should be batched
+                for i in 0..self.instances.len() {
+                    let offset = i * 4;
+                    gl.DrawArrays(gl::TRIANGLE_STRIP, offset as i32, 4);
+                }
             }
         } else {
             log::warn!("Tried to render DirtSquare before init")
@@ -200,13 +227,17 @@ impl Entity for DirtSquare {}
 const VERTEX_SHADER_SOURCE: &[u8] = b"
 #version 410 core
 
-layout(location = 0) in vec2 position;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 textureCoord;
 
 out vec2 TexCoord;
 
 void main() {
-    gl_Position = vec4(position, 0.0, 1.0);
+    gl_Position = projection * view * model * vec4(position, 1.0);
     TexCoord = textureCoord;
 }
 \0";

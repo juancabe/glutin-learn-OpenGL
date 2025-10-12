@@ -3,20 +3,42 @@ use std::{sync::Arc, time::Duration};
 use crate::{
     entities::Entity,
     gl::{self, Gles2},
-    helpers::{GlColor, GlPosition, Shader},
+    helpers::{GlColor, GlPosition, Mat3D, Shader},
     renderer::shader::{GlslPass, create_shader},
 };
 
-type TriangleVertex = (GlPosition, GlColor);
 #[derive(Clone)]
 pub struct HelloTriangle {
-    instances: Vec<[TriangleVertex; 3]>,
+    instances: Vec<[(GlPosition, GlColor); 3]>,
     last_second: u64,
     glsl_pass: Option<Shader>,
 }
 
+pub type Circumradius = f32;
+
+/// NOTE: We currently only draw the first instance
 impl HelloTriangle {
-    pub fn new(instances: Vec<[TriangleVertex; 3]>) -> HelloTriangle {
+    pub fn new(instances: Vec<(glam::Vec3, Circumradius)>) -> HelloTriangle {
+        let instances = instances
+            .into_iter()
+            .map(|(i, cr)| {
+                [
+                    (
+                        GlPosition::new(-1.0f32, -1.0f32, 0.0f32).normalize() * cr + i,
+                        GlColor::new(1.0f32, 0.0f32, 0.0f32, 1.0f32),
+                    ),
+                    (
+                        GlPosition::new(0.0f32, 1.0f32, 0.0f32).normalize() * cr + i,
+                        GlColor::new(0.0f32, 1.0f32, 0.0f32, 1.0f32),
+                    ),
+                    (
+                        GlPosition::new(1.0f32, -1.0f32, 0.0f32).normalize() * cr + i,
+                        GlColor::new(0.0f32, 0.0f32, 1.0f32, 1.0f32),
+                    ),
+                ]
+            })
+            .collect();
+
         Self {
             instances,
             last_second: 0,
@@ -29,7 +51,7 @@ impl HelloTriangle {
             .instances
             .concat()
             .iter()
-            .flat_map(|(p, c)| [p.x, p.y, c.r, c.g, c.b])
+            .flat_map(|(p, c)| [p.x, p.y, p.z, c.x, c.y, c.z])
             .collect();
 
         if let Some(Shader {
@@ -37,6 +59,7 @@ impl HelloTriangle {
             vao: _,
             gl_fns,
             vbo,
+            mat3d: _,
             tex: _,
         }) = &self.glsl_pass
         {
@@ -54,7 +77,7 @@ impl HelloTriangle {
         }
     }
 
-    fn rotate_left(&mut self) {
+    fn rotate_vertex_colors_left(&mut self) {
         for vert in self.instances.iter_mut() {
             let mut colors = vert.map(|(_, c)| c);
             colors.rotate_left(1);
@@ -62,37 +85,17 @@ impl HelloTriangle {
             vert[1].1 = colors[1];
             vert[2].1 = colors[2];
         }
-
-        self.apply_v_change_to_gpu();
-    }
-
-    fn draw_with_clear_color(
-        &self,
-        glsl_data: &Shader,
-        red: gl::types::GLfloat,
-        green: gl::types::GLfloat,
-        blue: gl::types::GLfloat,
-        alpha: gl::types::GLfloat,
-    ) {
-        let gl = &glsl_data.gl_fns;
-        let program = glsl_data.program;
-        let vao = glsl_data.vao;
-        let vbo = glsl_data.vbo;
-        unsafe {
-            glsl_data.gl_fns.UseProgram(program);
-
-            gl.BindVertexArray(vao);
-            gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
-
-            gl.ClearColor(red, green, blue, alpha);
-            gl.Clear(gl::COLOR_BUFFER_BIT);
-            gl.DrawArrays(gl::TRIANGLES, 0, 3);
-        }
     }
 }
 
+enum DeferredUpdate {
+    ApplyVChangeToGpu,
+    SetUniformsWithProjection(Mat3D),
+    SetUniforms(Mat3D),
+}
+
 impl GlslPass for HelloTriangle {
-    fn init(&mut self, gl_fns: Arc<Gles2>) {
+    fn init(&mut self, gl_fns: Arc<Gles2>, mat3d: Option<Mat3D>) {
         let program;
         let mut vao;
         let mut vbo;
@@ -102,7 +105,7 @@ impl GlslPass for HelloTriangle {
             .clone()
             .concat()
             .into_iter()
-            .flat_map(|(p, c)| [p.x, p.y, c.r, c.g, c.b])
+            .flat_map(|(p, c)| [p.x, p.y, p.z, c.x, c.y, c.z])
             .collect();
 
         unsafe {
@@ -121,6 +124,8 @@ impl GlslPass for HelloTriangle {
             gl_fns.DeleteShader(vertex_shader);
             gl_fns.DeleteShader(fragment_shader);
 
+            gl_fns.UseProgram(program);
+
             vao = std::mem::zeroed();
             gl_fns.GenVertexArrays(1, &mut vao);
             gl_fns.BindVertexArray(vao);
@@ -136,14 +141,18 @@ impl GlslPass for HelloTriangle {
                 gl::STATIC_DRAW,
             );
 
-            let pos_attrib = gl_fns.GetAttribLocation(program, b"position\0".as_ptr() as *const _);
-            let color_attrib = gl_fns.GetAttribLocation(program, b"color\0".as_ptr() as *const _);
+            if let Some(trans_uniforms) = mat3d {
+                trans_uniforms.set_uniforms_with_projection(&gl_fns, program);
+            }
+
+            let pos_attrib = gl_fns.GetAttribLocation(program, c"position".as_ptr() as *const _);
+            let color_attrib = gl_fns.GetAttribLocation(program, c"color".as_ptr() as *const _);
             gl_fns.VertexAttribPointer(
                 pos_attrib as gl::types::GLuint,
-                2,
+                3,
                 gl::FLOAT,
                 0,
-                5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
+                6 * std::mem::size_of::<f32>() as gl::types::GLsizei,
                 std::ptr::null(),
             );
             gl_fns.VertexAttribPointer(
@@ -151,8 +160,8 @@ impl GlslPass for HelloTriangle {
                 3,
                 gl::FLOAT,
                 0,
-                5 * std::mem::size_of::<f32>() as gl::types::GLsizei,
-                (2 * std::mem::size_of::<f32>()) as *const () as *const _,
+                6 * std::mem::size_of::<f32>() as gl::types::GLsizei,
+                (3 * std::mem::size_of::<f32>()) as *const () as *const _,
             );
             gl_fns.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
             gl_fns.EnableVertexAttribArray(color_attrib as gl::types::GLuint);
@@ -163,23 +172,85 @@ impl GlslPass for HelloTriangle {
             vao,
             vbo,
             tex: None,
+            mat3d,
             gl_fns,
         })
     }
 
     fn draw(&self) {
         if let Some(glsl_pass) = &self.glsl_pass {
-            self.draw_with_clear_color(glsl_pass, 0.1, 0.1, 0.1, 0.9);
+            log::debug!("Drawing HelloTriangle with mat3d: {:?}", glsl_pass.mat3d);
+            let gl = &glsl_pass.gl_fns;
+            let program = glsl_pass.program;
+            unsafe {
+                glsl_pass.gl_fns.UseProgram(program);
+
+                gl.BindVertexArray(glsl_pass.vao);
+                gl.BindBuffer(gl::ARRAY_BUFFER, glsl_pass.vbo);
+
+                // gl.DrawArrays(gl::TRIANGLES, 0, 3);
+
+                // NOTE: This should be batched
+                for i in (0..self.instances.len()).rev() {
+                    let offset = i * 3;
+                    gl.DrawArrays(gl::TRIANGLES, offset as i32, 3);
+                }
+            }
         } else {
             log::warn!("Tried to draw HelloTriangle before even initializing it")
         }
     }
 
-    fn update(&mut self, dt: &Duration) {
-        log::debug!("Updating triangles");
-        if dt.as_secs() > self.last_second {
+    fn update(&mut self, dt: Option<&Duration>, mat3d: Option<Mat3D>) {
+        // NOTE: Getting rid of this alloc for vec doesn't improve FPS
+        let mut defer_needs_use_program = vec![];
+
+        if let Some(dt) = dt
+            && dt.as_secs() > self.last_second
+        {
             self.last_second = dt.as_secs();
-            self.rotate_left();
+            self.rotate_vertex_colors_left();
+
+            defer_needs_use_program.push(DeferredUpdate::ApplyVChangeToGpu);
+        }
+
+        if let Some(shader) = &mut self.glsl_pass
+            && let Some(new_mat) = mat3d
+        {
+            if let Some(old_mat) = shader.mat3d
+                && old_mat.projection == new_mat.projection
+            {
+                log::debug!("SetUniforms...");
+                defer_needs_use_program.push(DeferredUpdate::SetUniforms(new_mat));
+            } else {
+                log::debug!("SetUniformsWithProjection...");
+                defer_needs_use_program.push(DeferredUpdate::SetUniformsWithProjection(new_mat));
+            }
+
+            shader.mat3d = mat3d;
+        }
+
+        if !defer_needs_use_program.is_empty()
+            && let Some(gl) = &self.glsl_pass
+        {
+            unsafe { gl.gl_fns.UseProgram(gl.program) }
+            let mut applied_vchange = false;
+            for deferred in defer_needs_use_program {
+                match deferred {
+                    DeferredUpdate::ApplyVChangeToGpu => {
+                        if !applied_vchange {
+                            self.apply_v_change_to_gpu();
+                            applied_vchange = true;
+                        }
+                    }
+                    DeferredUpdate::SetUniforms(mat3_d) => unsafe {
+                        mat3_d.set_uniforms(&gl.gl_fns, gl.program)
+                    },
+                    DeferredUpdate::SetUniformsWithProjection(mat3_d) => unsafe {
+                        mat3_d.set_uniforms_with_projection(&gl.gl_fns, gl.program)
+                    },
+                }
+            }
         }
     }
 }
@@ -207,13 +278,18 @@ impl Drop for HelloTriangle {
 const VERTEX_SHADER_SOURCE: &[u8] = b"
 #version 410 core
 
-layout(location = 0) in vec2 position;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+layout(location = 0) in vec3 position;
 layout(location = 1) in vec3 color;
 
 out vec3 v_color;  // goes to the fragment shader
 
 void main() {
-    gl_Position = vec4(position, 0.0, 1.0);
+    gl_Position = projection * view * model * vec4(position, 1.0);
+    // gl_Position = vec4(position, 0.0, 1.0);
     v_color = color;
 }
 \0";
