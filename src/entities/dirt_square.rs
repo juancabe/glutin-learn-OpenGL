@@ -1,7 +1,7 @@
 use crate::{
     entities::Entity,
     gl,
-    helpers::{GlPosition, Mat3D, Shader},
+    helpers::{GlPosition, Mat3DUpdate, Shader},
     renderer::shader::{GlslPass, create_shader},
 };
 
@@ -88,7 +88,7 @@ impl DirtSquare {
 }
 
 impl GlslPass for DirtSquare {
-    fn init(&mut self, gl_fns: std::sync::Arc<crate::gl::Gles2>, mat3d: Option<Mat3D>) {
+    fn init(&mut self, gl_fns: std::sync::Arc<crate::gl::Gles2>, mat3d: Mat3DUpdate) {
         let image = image::ImageReader::open("./assets/dirt.webp")
             .expect("assets/dirt.webp should be readable")
             .decode()
@@ -97,6 +97,8 @@ impl GlslPass for DirtSquare {
         let program;
         let mut vao;
         let mut vbo;
+
+        let mat3d = mat3d.as_init();
 
         let vertex_data: Vec<f32> = self
             .instances
@@ -140,9 +142,7 @@ impl GlslPass for DirtSquare {
                 gl::STATIC_DRAW,
             );
 
-            if let Some(trans_uniforms) = mat3d {
-                trans_uniforms.set_uniforms_with_projection(&gl_fns, program);
-            }
+            mat3d.set_uniforms(&gl_fns, program);
 
             let pos_attrib = gl_fns.GetAttribLocation(program, c"position".as_ptr() as *const _);
             gl_fns.VertexAttribPointer(
@@ -191,27 +191,19 @@ impl GlslPass for DirtSquare {
             vao,
             vbo,
             gl_fns,
-            mat3d,
+            model_transform: mat3d
+                .model
+                .expect("mat3d as_init should be at least IDENTITY"),
             tex: Some(tex),
         })
     }
 
-    fn update(&mut self, _dt: Option<&std::time::Duration>, mat3d: Option<Mat3D>) {
-        if let Some(shader) = &mut self.glsl_pass
-            && let Some(new_mat) = mat3d
-        {
-            unsafe { shader.gl_fns.UseProgram(shader.program) };
-            if let Some(old_mat) = shader.mat3d
-                && old_mat.projection == new_mat.projection
-            {
-                log::debug!("SetUniforms...");
-                unsafe { new_mat.set_uniforms(&shader.gl_fns, shader.program) };
-            } else {
-                log::debug!("SetUniformsWithProjection...");
-                unsafe { new_mat.set_uniforms_with_projection(&shader.gl_fns, shader.program) };
+    fn update(&mut self, mat3d: Mat3DUpdate) {
+        if let Some(shader) = &mut self.glsl_pass {
+            if let Some(model_updated) = mat3d.model {
+                shader.model_transform = model_updated;
             }
-
-            shader.mat3d = mat3d;
+            unsafe { mat3d.set_uniforms(&shader.gl_fns, shader.program) };
         }
     }
 
@@ -240,6 +232,13 @@ impl GlslPass for DirtSquare {
         } else {
             log::warn!("Tried to render DirtSquare before init")
         }
+    }
+
+    fn get_shader(&self) -> u32 {
+        self.glsl_pass
+            .as_ref()
+            .expect("called get_shader on uninitialized DirtSquare")
+            .program
     }
 }
 

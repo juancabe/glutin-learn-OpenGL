@@ -1,9 +1,9 @@
-use std::{sync::Arc, time::Duration};
+use std::{sync::Arc, time::Instant};
 
 use crate::{
     entities::Entity,
     gl::{self, Gles2},
-    helpers::{GlColor, GlPosition, Mat3D, Shader},
+    helpers::{GlColor, GlPosition, Mat3DUpdate, Shader},
     renderer::shader::{GlslPass, create_shader},
 };
 
@@ -11,6 +11,7 @@ use crate::{
 pub struct HelloTriangle {
     instances: Vec<[(GlPosition, GlColor); 3]>,
     last_second: u64,
+    init: Instant,
     glsl_pass: Option<Shader>,
 }
 
@@ -42,6 +43,7 @@ impl HelloTriangle {
         Self {
             instances,
             last_second: 0,
+            init: Instant::now(),
             glsl_pass: None,
         }
     }
@@ -59,7 +61,7 @@ impl HelloTriangle {
             vao: _,
             gl_fns,
             vbo,
-            mat3d: _,
+            model_transform: _,
             tex: _,
         }) = &self.glsl_pass
         {
@@ -88,17 +90,13 @@ impl HelloTriangle {
     }
 }
 
-enum DeferredUpdate {
-    ApplyVChangeToGpu,
-    SetUniformsWithProjection(Mat3D),
-    SetUniforms(Mat3D),
-}
-
 impl GlslPass for HelloTriangle {
-    fn init(&mut self, gl_fns: Arc<Gles2>, mat3d: Option<Mat3D>) {
+    fn init(&mut self, gl_fns: Arc<Gles2>, mat3d: Mat3DUpdate) {
         let program;
         let mut vao;
         let mut vbo;
+
+        let mat3d = mat3d.as_init();
 
         let vertex_data: Vec<f32> = self
             .instances
@@ -141,12 +139,9 @@ impl GlslPass for HelloTriangle {
                 gl::STATIC_DRAW,
             );
 
-            if let Some(trans_uniforms) = mat3d {
-                trans_uniforms.set_uniforms_with_projection(&gl_fns, program);
-            }
+            mat3d.set_uniforms(&gl_fns, program);
 
             let pos_attrib = gl_fns.GetAttribLocation(program, c"position".as_ptr() as *const _);
-            let color_attrib = gl_fns.GetAttribLocation(program, c"color".as_ptr() as *const _);
             gl_fns.VertexAttribPointer(
                 pos_attrib as gl::types::GLuint,
                 3,
@@ -155,6 +150,8 @@ impl GlslPass for HelloTriangle {
                 6 * std::mem::size_of::<f32>() as gl::types::GLsizei,
                 std::ptr::null(),
             );
+
+            let color_attrib = gl_fns.GetAttribLocation(program, c"color".as_ptr() as *const _);
             gl_fns.VertexAttribPointer(
                 color_attrib as gl::types::GLuint,
                 3,
@@ -163,6 +160,7 @@ impl GlslPass for HelloTriangle {
                 6 * std::mem::size_of::<f32>() as gl::types::GLsizei,
                 (3 * std::mem::size_of::<f32>()) as *const () as *const _,
             );
+
             gl_fns.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
             gl_fns.EnableVertexAttribArray(color_attrib as gl::types::GLuint);
         }
@@ -172,19 +170,21 @@ impl GlslPass for HelloTriangle {
             vao,
             vbo,
             tex: None,
-            mat3d,
+            model_transform: mat3d
+                .model
+                .expect("mat3d as init should be at least IDENTITY"),
             gl_fns,
         })
     }
 
     fn draw(&self) {
         if let Some(glsl_pass) = &self.glsl_pass {
-            log::debug!("Drawing HelloTriangle with mat3d: {:?}", glsl_pass.mat3d);
+            log::debug!(
+                "Drawing HelloTriangle with model_transform: {:?}",
+                glsl_pass.model_transform
+            );
             let gl = &glsl_pass.gl_fns;
-            let program = glsl_pass.program;
             unsafe {
-                glsl_pass.gl_fns.UseProgram(program);
-
                 gl.BindVertexArray(glsl_pass.vao);
                 gl.BindBuffer(gl::ARRAY_BUFFER, glsl_pass.vbo);
 
@@ -201,57 +201,35 @@ impl GlslPass for HelloTriangle {
         }
     }
 
-    fn update(&mut self, dt: Option<&Duration>, mat3d: Option<Mat3D>) {
-        // NOTE: Getting rid of this alloc for vec doesn't improve FPS
-        let mut defer_needs_use_program = vec![];
-
-        if let Some(dt) = dt
-            && dt.as_secs() > self.last_second
-        {
-            self.last_second = dt.as_secs();
+    fn update(&mut self, mut mat3d: Mat3DUpdate) {
+        let elapsed = self.init.elapsed();
+        if elapsed.as_secs() > self.last_second {
+            self.last_second = elapsed.as_secs();
             self.rotate_vertex_colors_left();
-
-            defer_needs_use_program.push(DeferredUpdate::ApplyVChangeToGpu);
+            self.apply_v_change_to_gpu();
         }
 
-        if let Some(shader) = &mut self.glsl_pass
-            && let Some(new_mat) = mat3d
-        {
-            if let Some(old_mat) = shader.mat3d
-                && old_mat.projection == new_mat.projection
-            {
-                log::debug!("SetUniforms...");
-                defer_needs_use_program.push(DeferredUpdate::SetUniforms(new_mat));
+        if let Some(shader) = &mut self.glsl_pass {
+            if let Some(model) = mat3d.model {
+                shader.model_transform = model;
             } else {
-                log::debug!("SetUniformsWithProjection...");
-                defer_needs_use_program.push(DeferredUpdate::SetUniformsWithProjection(new_mat));
+                let elapsed_s_f32 = self.init.elapsed().as_secs_f32();
+                let spin_duration_s = 1.5;
+                let next_spin_stop = f32::ceil(elapsed_s_f32 / spin_duration_s) * spin_duration_s;
+                let perc_of_rotation = (next_spin_stop - elapsed_s_f32) / spin_duration_s;
+                let rotation = 360.0 * perc_of_rotation;
+                shader.model_transform = glam::Mat4::from_rotation_y((rotation).to_radians());
+                mat3d.model = Some(shader.model_transform);
             }
-
-            shader.mat3d = mat3d;
+            unsafe { mat3d.set_uniforms(&shader.gl_fns, shader.program) };
         }
+    }
 
-        if !defer_needs_use_program.is_empty()
-            && let Some(gl) = &self.glsl_pass
-        {
-            unsafe { gl.gl_fns.UseProgram(gl.program) }
-            let mut applied_vchange = false;
-            for deferred in defer_needs_use_program {
-                match deferred {
-                    DeferredUpdate::ApplyVChangeToGpu => {
-                        if !applied_vchange {
-                            self.apply_v_change_to_gpu();
-                            applied_vchange = true;
-                        }
-                    }
-                    DeferredUpdate::SetUniforms(mat3_d) => unsafe {
-                        mat3_d.set_uniforms(&gl.gl_fns, gl.program)
-                    },
-                    DeferredUpdate::SetUniformsWithProjection(mat3_d) => unsafe {
-                        mat3_d.set_uniforms_with_projection(&gl.gl_fns, gl.program)
-                    },
-                }
-            }
-        }
+    fn get_shader(&self) -> u32 {
+        self.glsl_pass
+            .as_ref()
+            .expect("get_shader called on uninitialized GlslPass object")
+            .program
     }
 }
 

@@ -25,10 +25,9 @@ use winit::{
 
 use crate::entities::Entity;
 use crate::entities::dirt_cube::DirtCube;
-use crate::entities::dirt_square::{DirtSquare, Square};
 use crate::entities::hello_triangle::HelloTriangle;
 use crate::gl::{self};
-use crate::helpers::{FpsCounter, GlPosition, Mat3D};
+use crate::helpers::{FpsCounter, GlPosition, Mat3DUpdate};
 use crate::renderer::shader::GlslPass;
 use crate::{GlDisplayCreationState, renderer::Renderer, window_attributes};
 use glutin::surface::{Surface, SwapInterval, WindowSurface};
@@ -181,10 +180,10 @@ impl ApplicationHandler for App {
 
         let dimensions = glam::Vec2::new(dimensions.x as f32, dimensions.y as f32);
 
-        let entities_transformations_3d = Mat3D::default_from_dimensions(&dimensions);
+        let entities_transformations_3d = Mat3DUpdate::default_from_dimensions(&dimensions);
 
         for entity in entities.iter_mut() {
-            entity.init(gl_fns.clone(), Some(entities_transformations_3d));
+            entity.init(gl_fns.clone(), entities_transformations_3d);
         }
 
         assert!(
@@ -233,10 +232,9 @@ impl ApplicationHandler for App {
                 if let Some(AppState {
                     gl_surface,
                     window: _,
-                    entities,
+                    entities: _,
                 }) = self.state.as_mut()
                 {
-                    // TODO: Adapt mat3d
                     let gl_context = self.gl_context.as_ref().unwrap();
                     gl_surface.resize(
                         gl_context,
@@ -291,26 +289,10 @@ impl ApplicationHandler for App {
                 log::info!("FPS: {fps}");
             }
 
-            let dimensions = renderer.get_window_dimensions();
-            let dimensions = glam::Vec2::new(dimensions.x as f32, dimensions.y as f32);
-
-            let mut mat3d = Mat3D::default_from_dimensions(&dimensions);
-            mat3d.view *= glam::Mat4::from_rotation_y(
-                (360.0
-                    * (self.init.elapsed().as_secs_f32() - self.init.elapsed().as_secs() as f32))
-                    .to_radians(),
-            )
-            // * glam::Mat4::from_rotation_z(
-            //     (360.0
-            //         * (self.init.elapsed().as_secs_f32() - self.init.elapsed().as_secs() as f32))
-            //         .to_radians(),
-            // )
-            ;
-
             let gl_context = self.gl_context.as_ref().unwrap();
 
             let renderer_refs = entities.iter_mut().map(|e| e.as_mut() as &mut dyn GlslPass);
-            renderer.draw(renderer_refs, mat3d);
+            renderer.draw(renderer_refs, Mat3DUpdate::default());
 
             window.request_redraw();
 

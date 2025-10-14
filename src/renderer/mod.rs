@@ -1,10 +1,10 @@
-use std::{ffi::CStr, sync::Arc, time::Instant};
+use std::{ffi::CStr, sync::Arc};
 
 use glam::USizeVec2;
 
 use crate::{
     gl::{self, Gles2},
-    helpers::Mat3D,
+    helpers::Mat3DUpdate,
     renderer::shader::GlslPass,
 };
 
@@ -12,7 +12,6 @@ pub mod shader;
 
 pub struct Renderer {
     window_dimensions: glam::USizeVec2,
-    creation: Instant,
     gl: Arc<gl::Gl>,
 }
 
@@ -33,25 +32,21 @@ impl Renderer {
 
         Self {
             window_dimensions,
-            creation: Instant::now(),
             gl: gl_fns,
         }
     }
 
-    pub fn draw<'a, I>(&mut self, objects: I, mat3d: Mat3D)
+    pub fn draw<'a, I>(&mut self, objects: I, mat3d: Mat3DUpdate)
     where
         I: Iterator<Item = &'a mut dyn GlslPass>,
     {
-        let dt = self.creation.elapsed();
-
         unsafe {
             self.gl.ClearColor(0.1, 0.1, 0.1, 1.0);
             self.gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
         for obj in objects {
-            obj.update(Some(&dt), Some(mat3d));
-            obj.draw();
+            obj.update_draw(mat3d, &self.gl);
         }
     }
 

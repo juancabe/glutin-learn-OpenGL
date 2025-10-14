@@ -64,17 +64,21 @@ impl GlslPass for DirtCube {
     fn init(
         &mut self,
         gl_fns: std::sync::Arc<crate::gl::Gles2>,
-        mat3d: Option<crate::helpers::Mat3D>,
+        mat3d: crate::helpers::Mat3DUpdate,
     ) {
         self.squares.init(gl_fns.clone(), mat3d);
     }
 
-    fn update(&mut self, dt: Option<&std::time::Duration>, mat3d: Option<crate::helpers::Mat3D>) {
-        self.squares.update(dt, mat3d);
+    fn update(&mut self, mat3d: crate::helpers::Mat3DUpdate) {
+        self.squares.update(mat3d);
     }
 
     fn draw(&self) {
         self.squares.draw();
+    }
+
+    fn get_shader(&self) -> u32 {
+        self.squares.get_shader()
     }
 }
 
