@@ -9,7 +9,7 @@ use std::time::Instant;
 use std::vec;
 use std::{error::Error, num::NonZeroU32};
 use winit::event::ElementState;
-use winit::keyboard::PhysicalKey;
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
 use glutin::{
@@ -25,7 +25,7 @@ use winit::{
     keyboard::{Key, NamedKey},
 };
 
-use crate::camera::{Camera, CameraMovementXZ};
+use crate::camera::Camera;
 use crate::entities::Entity;
 use crate::entities::dirt_cube::DirtCube;
 use crate::entities::hello_triangle::HelloTriangle;
@@ -255,28 +255,13 @@ impl ApplicationHandler for App {
                         ..
                     },
                 ..
-            } => {
-                if let Some(state) = self.state.as_mut()
-                    && let Some(movement) = CameraMovementXZ::from_keycode(code)
-                {
-                    state.camera.want_move(movement);
-                }
-            }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(code),
-                        state: ElementState::Released,
-                        ..
-                    },
-                ..
-            } => {
-                if let Some(state) = self.state.as_mut()
-                    && let Some(movement) = CameraMovementXZ::from_keycode(code)
-                {
-                    state.camera.stop_move(movement);
-                }
-            }
+            } => match (code, self.state.as_mut()) {
+                (KeyCode::KeyW, Some(state)) => todo!("move"),
+                (KeyCode::KeyA, Some(state)) => todo!("move"),
+                (KeyCode::KeyS, Some(state)) => todo!("move"),
+                (KeyCode::KeyD, Some(state)) => todo!("move"),
+                _ => {}
+            },
             WindowEvent::CloseRequested
             | WindowEvent::KeyboardInput {
                 event:
@@ -312,7 +297,6 @@ impl ApplicationHandler for App {
             gl_surface,
             window,
             entities,
-            camera,
         }) = self.state.as_mut()
         {
             let renderer = self.renderer.as_mut().unwrap();
@@ -324,15 +308,7 @@ impl ApplicationHandler for App {
             let gl_context = self.gl_context.as_ref().unwrap();
 
             let renderer_refs = entities.iter_mut().map(|e| e.as_mut() as &mut dyn GlslPass);
-
-            camera.update();
-
-            let mat3d = Mat3DUpdate {
-                view: Some(camera.as_view()),
-                ..Default::default()
-            };
-
-            renderer.draw(renderer_refs, mat3d);
+            renderer.draw(renderer_refs, Mat3DUpdate::default());
 
             window.request_redraw();
 

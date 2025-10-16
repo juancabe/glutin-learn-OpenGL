@@ -1,16 +1,15 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 pub mod app;
+pub mod camera;
 pub mod entities;
 pub mod helpers;
 pub mod renderer;
 
+use glutin::config::ConfigTemplateBuilder;
+use glutin_winit::DisplayBuilder;
 use std::error::Error;
 use winit::window::{Window, WindowAttributes};
-
-use glutin::config::ConfigTemplateBuilder;
-
-use glutin_winit::DisplayBuilder;
 
 use crate::app::App;
 
