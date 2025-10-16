@@ -25,7 +25,7 @@ use winit::{
     keyboard::{Key, NamedKey},
 };
 
-use crate::camera::{Camera, CameraMovementXZ};
+use crate::camera::{Camera, CameraMovement};
 use crate::entities::Entity;
 use crate::entities::dirt_cube::DirtCube;
 use crate::entities::hello_triangle::HelloTriangle;
@@ -45,10 +45,10 @@ struct AppState {
     window: Window,
     entities: Vec<Box<dyn Entity>>,
     camera: Camera,
+    last_frame: Instant,
 }
 
 pub struct App {
-    init: Instant,
     template: ConfigTemplateBuilder,
     renderer: Option<Renderer>,
     // NOTE: `AppState` carries the `Window`, thus it should be dropped after everything else.
@@ -62,7 +62,6 @@ pub struct App {
 impl App {
     pub fn new(template: ConfigTemplateBuilder, display_builder: DisplayBuilder) -> Self {
         Self {
-            init: Instant::now(),
             template,
             gl_display: GlDisplayCreationState::Builder(display_builder),
             exit_state: Ok(()),
@@ -131,6 +130,13 @@ impl ApplicationHandler for App {
                 .unwrap()
         };
 
+        window
+            .set_cursor_grab(winit::window::CursorGrabMode::Confined)
+            .or_else(|_| window.set_cursor_grab(winit::window::CursorGrabMode::Locked))
+            .expect("Cursor should be grabbable");
+
+        window.set_cursor_visible(false);
+
         // The context needs to be current for the Renderer to set up shaders and
         // buffers.
         let gl_context = self.gl_context.as_ref().unwrap();
@@ -193,6 +199,7 @@ impl ApplicationHandler for App {
         assert!(
             self.state
                 .replace(AppState {
+                    last_frame: Instant::now(),
                     entities,
                     gl_surface,
                     window,
@@ -222,6 +229,20 @@ impl ApplicationHandler for App {
         );
     }
 
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+        let winit::event::DeviceEvent::MouseMotion { delta: (dx, dy) } = event else {
+            return;
+        };
+        if let Some(state) = self.state.as_mut() {
+            state.camera.mouse_moved(dx as f32, dy as f32)
+        }
+    }
+
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
@@ -247,36 +268,6 @@ impl ApplicationHandler for App {
                     renderer.resize(size.width as i32, size.height as i32);
                 }
             }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(code),
-                        state: ElementState::Pressed,
-                        ..
-                    },
-                ..
-            } => {
-                if let Some(state) = self.state.as_mut()
-                    && let Some(movement) = CameraMovementXZ::from_keycode(code)
-                {
-                    state.camera.want_move(movement);
-                }
-            }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(code),
-                        state: ElementState::Released,
-                        ..
-                    },
-                ..
-            } => {
-                if let Some(state) = self.state.as_mut()
-                    && let Some(movement) = CameraMovementXZ::from_keycode(code)
-                {
-                    state.camera.stop_move(movement);
-                }
-            }
             WindowEvent::CloseRequested
             | WindowEvent::KeyboardInput {
                 event:
@@ -286,6 +277,25 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => event_loop.exit(),
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(code),
+                        state: key_state,
+                        ..
+                    },
+                ..
+            } => {
+                if let Some(state) = self.state.as_mut()
+                    && let Some(movement) = CameraMovement::from_keycode(code)
+                {
+                    match key_state {
+                        ElementState::Pressed => state.camera.want_move(movement),
+                        ElementState::Released => state.camera.stop_move(movement),
+                    }
+                }
+            }
+
             _ => (),
         }
     }
@@ -309,6 +319,7 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         if let Some(AppState {
+            last_frame,
             gl_surface,
             window,
             entities,
@@ -316,6 +327,9 @@ impl ApplicationHandler for App {
         }) = self.state.as_mut()
         {
             let renderer = self.renderer.as_mut().unwrap();
+
+            let dt = last_frame.elapsed();
+            *last_frame = Instant::now();
 
             if let Some(fps) = self.fps_counter.tick() {
                 log::info!("FPS: {fps}");
@@ -325,7 +339,7 @@ impl ApplicationHandler for App {
 
             let renderer_refs = entities.iter_mut().map(|e| e.as_mut() as &mut dyn GlslPass);
 
-            camera.update();
+            camera.update(&dt);
 
             let mat3d = Mat3DUpdate {
                 view: Some(camera.as_view()),
