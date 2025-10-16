@@ -4,7 +4,7 @@ use glam::Vec3;
 use winit::keyboard::KeyCode;
 
 const VEL: f32 = 0.01;
-const SENS: f32 = 0.01;
+const SENS: f32 = 0.1;
 
 pub enum CameraMovement {
     Front,
@@ -17,7 +17,6 @@ pub enum CameraMovement {
 
 impl CameraMovement {
     pub fn from_keycode(value: KeyCode) -> Option<Self> {
-        log::info!("Decoding KeyCode: {value:?}");
         match value {
             KeyCode::KeyW => Some(Self::Front),
             KeyCode::KeyA => Some(Self::Left),

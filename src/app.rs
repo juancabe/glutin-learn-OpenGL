@@ -162,24 +162,29 @@ impl ApplicationHandler for App {
         if let Err(res) = gl_surface
             .set_swap_interval(gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
         {
-            eprintln!("Error setting vsync: {res:?}");
+            log::error!("Error setting vsync: {res:?}");
         }
 
-        let mut cubes = vec![];
-        let mut triangles = vec![];
+        const FLOOR_SIDE: usize = 10;
+        const CS: f32 = 0.5;
+        let mut cubes_floor = vec![];
+        // let mut triangles = vec![];
 
-        for i in 0..1 {
-            cubes.push(GlPosition::new(i as f32 / 2.0, 0.0, 0.0));
-            triangles.push((glam::Vec3::new(i as f32 / 2.0, 0.5, 0.0), 0.33f32));
+        for i in 0..FLOOR_SIDE {
+            cubes_floor.push(GlPosition::new(i as f32 * CS, 0.0, i as f32 * CS));
+            for j in 0..(FLOOR_SIDE - i) {
+                cubes_floor.push(GlPosition::new((i + j) as f32 * CS, 0.0, i as f32 * CS));
+                cubes_floor.push(GlPosition::new(i as f32 * CS, 0.0, (i + j) as f32 * CS));
+            }
         }
 
         let mut entities: Vec<Box<dyn Entity>> = vec![
-            Box::new(HelloTriangle::new(triangles)),
+            // Box::new(HelloTriangle::new(triangles)),
             // Box::new(DirtSquare::new(vec![Square {
             //     bottom_left: GlPosition::new(-0.5, -0.5, 0.0),
             //     top_right: GlPosition::new(-0.3, -0.3, 0.0),
             // }])),
-            Box::new(DirtCube::new(cubes, 0.5)),
+            Box::new(DirtCube::new(cubes_floor, 0.5)),
         ];
 
         let dimensions = self
@@ -239,7 +244,7 @@ impl ApplicationHandler for App {
             return;
         };
         if let Some(state) = self.state.as_mut() {
-            state.camera.mouse_moved(dx as f32, dy as f32)
+            state.camera.mouse_moved(dx as f32, -dy as f32)
         }
     }
 
