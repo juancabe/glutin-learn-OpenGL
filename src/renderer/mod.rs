@@ -46,7 +46,7 @@ impl Renderer {
         }
 
         for obj in objects {
-            obj.update_draw(mat3d, &self.gl);
+            obj.update_draw(mat3d);
         }
     }
 

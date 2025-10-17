@@ -1,8 +1,8 @@
 use crate::{
     entities::Entity,
     gl,
-    helpers::{GlPosition, Mat3DUpdate, Shader},
-    renderer::shader::{GlslPass, create_shader},
+    helpers::{GlPosition, Mat3DUpdate},
+    renderer::shader::{Array, Drawable, GlslPass, Shader, Tex, create_shader},
 };
 
 #[derive(Clone)]
@@ -12,15 +12,6 @@ pub struct Square {
 }
 
 impl Square {
-    // pub fn as_vertex_stride(&self) -> [GlPosition; 4] {
-    //     [
-    //         self.bottom_left,
-    //         GlPosition::new(self.bottom_left.x, self.top_right.y, self.top_right.z),
-    //         GlPosition::new(self.top_right.x, self.bottom_left.y, self.bottom_left.z),
-    //         self.top_right,
-    //     ]
-    // }
-
     pub fn as_vertex_stride(&self) -> [GlPosition; 4] {
         let (minx, maxx) = (
             self.bottom_left.x.min(self.top_right.x),
@@ -74,14 +65,14 @@ impl Square {
 }
 
 pub struct DirtSquare {
-    glsl_pass: Option<Shader>,
+    shader: Option<Shader>,
     instances: Vec<Square>,
 }
 
 impl DirtSquare {
     pub fn new(instances: Vec<Square>) -> Self {
         Self {
-            glsl_pass: None,
+            shader: None,
             instances,
         }
     }
@@ -186,20 +177,32 @@ impl GlslPass for DirtSquare {
             // --
         }
 
-        self.glsl_pass = Some(Shader {
+        let tex = Tex {
+            tex,
+            target: gl::TEXTURE_2D,
+        };
+
+        let drawable = Drawable::Array(Array {
+            vbo,
+            len: self.instances.len(),
+            offset: 4,
+            count: 4,
+        });
+
+        self.shader = Some(Shader {
             program,
             vao,
-            vbo,
-            gl_fns,
             model_transform: mat3d
                 .model
                 .expect("mat3d as_init should be at least IDENTITY"),
             tex: Some(tex),
+            drawable,
+            gl_fns,
         })
     }
 
     fn update(&mut self, mat3d: Mat3DUpdate) {
-        if let Some(shader) = &mut self.glsl_pass {
+        if let Some(shader) = &mut self.shader {
             if let Some(model_updated) = mat3d.model {
                 shader.model_transform = model_updated;
             }
@@ -207,58 +210,35 @@ impl GlslPass for DirtSquare {
         }
     }
 
-    fn draw(&self) {
-        if let Some(glsl_pass) = &self.glsl_pass {
-            log::debug!("Calling draw on DirtSquare");
-            let gl = &glsl_pass.gl_fns;
-            let program = glsl_pass.program;
-            let vao = glsl_pass.vao;
-            let vbo = glsl_pass.vbo;
-            let tex = glsl_pass.tex.expect("Tex should have being set");
+    // fn draw(&self) {
+    //     if let Some(glsl_pass) = &self.glsl_pass {
+    //         log::debug!("Calling draw on DirtSquare");
+    //         let gl = &glsl_pass.gl_fns;
+    //         let program = glsl_pass.program;
+    //         let vao = glsl_pass.vao;
+    //         let vbo = glsl_pass.vbo;
+    //         let tex = glsl_pass.tex.expect("Tex should have being set");
+    //
+    //         unsafe {
+    //             gl.UseProgram(program);
+    //
+    //             gl.BindTexture(gl::TEXTURE_2D, tex);
+    //             gl.BindVertexArray(vao);
+    //             gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
+    //
+    //             // NOTE: This should be batched
+    //             for i in 0..self.instances.len() {
+    //                 let offset = i * 4;
+    //                 gl.DrawArrays(gl::TRIANGLE_STRIP, offset as i32, 4);
+    //             }
+    //         }
+    //     } else {
+    //         log::warn!("Tried to render DirtSquare before init")
+    //     }
+    // }
 
-            unsafe {
-                gl.UseProgram(program);
-
-                gl.BindTexture(gl::TEXTURE_2D, tex);
-                gl.BindVertexArray(vao);
-                gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
-
-                // NOTE: This should be batched
-                for i in 0..self.instances.len() {
-                    let offset = i * 4;
-                    gl.DrawArrays(gl::TRIANGLE_STRIP, offset as i32, 4);
-                }
-            }
-        } else {
-            log::warn!("Tried to render DirtSquare before init")
-        }
-    }
-
-    fn get_shader(&self) -> u32 {
-        self.glsl_pass
-            .as_ref()
-            .expect("called get_shader on uninitialized DirtSquare")
-            .program
-    }
-}
-
-impl Drop for DirtSquare {
-    // NOTE: This is the same as HelloTriangle, maybe a clue for an
-    // abstraction 🤔
-    fn drop(&mut self) {
-        if let Some(glsl_pass) = &self.glsl_pass {
-            let gl_fns = &glsl_pass.gl_fns;
-            let program = glsl_pass.program;
-            let vao = glsl_pass.vao;
-            let vbo = glsl_pass.vbo;
-            unsafe {
-                gl_fns.DeleteProgram(program);
-                gl_fns.DeleteBuffers(1, &vbo);
-                gl_fns.DeleteVertexArrays(1, &vao);
-            }
-        } else {
-            log::warn!("Dropped DirtSquare before even initializing it")
-        }
+    fn get_shader(&self) -> Option<&Shader> {
+        self.shader.as_ref()
     }
 }
 

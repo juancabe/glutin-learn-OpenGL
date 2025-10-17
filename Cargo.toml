@@ -11,6 +11,7 @@ glutin-winit = "0.5.0"
 image = "0.25.8"
 log = "0.4.28"
 raw-window-handle = "0.6.2"
+tobj = "4.0.3"
 winit = "0.30.12"
 
 [build-dependencies]

@@ -3,8 +3,8 @@ use std::{sync::Arc, time::Instant};
 use crate::{
     entities::Entity,
     gl::{self, Gles2},
-    helpers::{GlColor, GlPosition, Mat3DUpdate, Shader},
-    renderer::shader::{GlslPass, create_shader},
+    helpers::{GlColor, GlPosition, Mat3DUpdate},
+    renderer::shader::{Array, Drawable, GlslPass, Shader, create_shader},
 };
 
 #[derive(Clone)]
@@ -12,14 +12,14 @@ pub struct HelloTriangle {
     instances: Vec<[(GlPosition, GlColor); 3]>,
     last_second: u64,
     init: Instant,
-    glsl_pass: Option<Shader>,
+    shader: Option<Shader>,
 }
 
 pub type Circumradius = f32;
 
 /// NOTE: We currently only draw the first instance
 impl HelloTriangle {
-    pub fn new(instances: Vec<(glam::Vec3, Circumradius)>) -> HelloTriangle {
+    pub fn new(instances: Vec<(GlPosition, Circumradius)>) -> HelloTriangle {
         let instances = instances
             .into_iter()
             .map(|(i, cr)| {
@@ -44,7 +44,7 @@ impl HelloTriangle {
             instances,
             last_second: 0,
             init: Instant::now(),
-            glsl_pass: None,
+            shader: None,
         }
     }
 
@@ -57,16 +57,15 @@ impl HelloTriangle {
             .collect();
 
         if let Some(Shader {
-            program: _,
-            vao: _,
-            gl_fns,
-            vbo,
-            model_transform: _,
-            tex: _,
-        }) = &self.glsl_pass
+            gl_fns, drawable, ..
+        }) = &self.shader
         {
+            let Drawable::Array(array) = drawable else {
+                panic!("The drawable in HelloTriangle mutated illegally");
+            };
+
             unsafe {
-                gl_fns.BindBuffer(gl::ARRAY_BUFFER, *vbo);
+                gl_fns.BindBuffer(gl::ARRAY_BUFFER, array.vbo);
                 gl_fns.BufferSubData(
                     gl::ARRAY_BUFFER,
                     0,
@@ -165,41 +164,48 @@ impl GlslPass for HelloTriangle {
             gl_fns.EnableVertexAttribArray(color_attrib as gl::types::GLuint);
         }
 
-        self.glsl_pass = Some(Shader {
+        let drawable = Drawable::Array(Array {
+            vbo,
+            len: self.instances.len(),
+            offset: 3,
+            count: 3,
+        });
+
+        self.shader = Some(Shader {
             program,
             vao,
-            vbo,
-            tex: None,
             model_transform: mat3d
                 .model
                 .expect("mat3d as init should be at least IDENTITY"),
+            drawable,
+            tex: Default::default(),
             gl_fns,
         })
     }
 
-    fn draw(&self) {
-        if let Some(glsl_pass) = &self.glsl_pass {
-            log::debug!(
-                "Drawing HelloTriangle with model_transform: {:?}",
-                glsl_pass.model_transform
-            );
-            let gl = &glsl_pass.gl_fns;
-            unsafe {
-                gl.BindVertexArray(glsl_pass.vao);
-                gl.BindBuffer(gl::ARRAY_BUFFER, glsl_pass.vbo);
-
-                // gl.DrawArrays(gl::TRIANGLES, 0, 3);
-
-                // NOTE: This should be batched
-                for i in (0..self.instances.len()).rev() {
-                    let offset = i * 3;
-                    gl.DrawArrays(gl::TRIANGLES, offset as i32, 3);
-                }
-            }
-        } else {
-            log::warn!("Tried to draw HelloTriangle before even initializing it")
-        }
-    }
+    // unsafe fn draw(&self) {
+    //     if let Some(glsl_pass) = &self.glsl_pass {
+    //         log::debug!(
+    //             "Drawing HelloTriangle with model_transform: {:?}",
+    //             glsl_pass.model_transform
+    //         );
+    //         let gl = &glsl_pass.gl_fns;
+    //         unsafe {
+    //             gl.BindVertexArray(glsl_pass.vao);
+    //             gl.BindBuffer(gl::ARRAY_BUFFER, glsl_pass.vbo);
+    //
+    //             // gl.DrawArrays(gl::TRIANGLES, 0, 3);
+    //
+    //             // NOTE: This should be batched
+    //             for i in (0..self.instances.len()).rev() {
+    //                 let offset = i * 3;
+    //                 gl.DrawArrays(gl::TRIANGLES, offset as i32, 3);
+    //             }
+    //         }
+    //     } else {
+    //         log::warn!("Tried to draw HelloTriangle before even initializing it")
+    //     }
+    // }
 
     fn update(&mut self, mut mat3d: Mat3DUpdate) {
         let elapsed = self.init.elapsed();
@@ -209,7 +215,7 @@ impl GlslPass for HelloTriangle {
             self.apply_v_change_to_gpu();
         }
 
-        if let Some(shader) = &mut self.glsl_pass {
+        if let Some(shader) = &mut self.shader {
             if let Some(model) = mat3d.model {
                 shader.model_transform = model;
             } else {
@@ -225,33 +231,12 @@ impl GlslPass for HelloTriangle {
         }
     }
 
-    fn get_shader(&self) -> u32 {
-        self.glsl_pass
-            .as_ref()
-            .expect("get_shader called on uninitialized GlslPass object")
-            .program
+    fn get_shader(&self) -> Option<&Shader> {
+        self.shader.as_ref()
     }
 }
 
 impl Entity for HelloTriangle {}
-
-impl Drop for HelloTriangle {
-    fn drop(&mut self) {
-        if let Some(glsl_pass) = &self.glsl_pass {
-            let gl_fns = &glsl_pass.gl_fns;
-            let program = glsl_pass.program;
-            let vao = glsl_pass.vao;
-            let vbo = glsl_pass.vbo;
-            unsafe {
-                gl_fns.DeleteProgram(program);
-                gl_fns.DeleteBuffers(1, &vbo);
-                gl_fns.DeleteVertexArrays(1, &vao);
-            }
-        } else {
-            log::warn!("Dropped HelloTriangle before even initializing it")
-        }
-    }
-}
 
 const VERTEX_SHADER_SOURCE: &[u8] = b"
 #version 410 core

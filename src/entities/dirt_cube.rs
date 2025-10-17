@@ -4,7 +4,7 @@ use crate::{
         dirt_square::{DirtSquare, Square},
     },
     helpers::GlPosition,
-    renderer::shader::GlslPass,
+    renderer::shader::{GlslPass, Shader},
 };
 
 fn build_faces(pos: &GlPosition, side_len: f32) -> [Square; 6] {
@@ -73,11 +73,11 @@ impl GlslPass for DirtCube {
         self.squares.update(mat3d);
     }
 
-    fn draw(&self) {
+    unsafe fn draw(&self) {
         self.squares.draw();
     }
 
-    fn get_shader(&self) -> u32 {
+    fn get_shader(&self) -> Option<&Shader> {
         self.squares.get_shader()
     }
 }

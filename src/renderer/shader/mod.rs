@@ -4,6 +4,96 @@ use crate::{
 };
 use std::{ffi::CStr, sync::Arc};
 
+#[derive(Clone, Debug, Default)]
+pub struct IndexedElements {
+    pub ebo: gl::types::GLuint,
+    pub vbo: gl::types::GLuint,
+    pub index_count: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Array {
+    pub vbo: gl::types::GLuint,
+    /// Total amount of DrawArrays calls
+    pub len: usize,
+    /// Offset between DrawArrays call's vertex targets
+    pub offset: usize,
+    /// Count of vertices used per call to draw triangles
+    pub count: usize,
+}
+
+#[derive(Clone)]
+pub enum Drawable {
+    Indexed(IndexedElements),
+    Array(Array),
+}
+
+#[derive(Default, Clone)]
+pub struct Tex {
+    pub tex: gl::types::GLuint,
+    pub target: gl::types::GLuint,
+}
+
+#[derive(Clone)]
+pub struct Shader {
+    pub program: gl::types::GLuint,
+    pub vao: gl::types::GLuint,
+    pub drawable: Drawable,
+    pub tex: Option<Tex>,
+    pub model_transform: glam::Mat4,
+    pub gl_fns: Arc<Gles2>,
+}
+
+impl Shader {
+    pub fn new(gl_fns: Arc<Gles2>, drawable: Drawable) -> Self {
+        Self {
+            program: Default::default(),
+            vao: Default::default(),
+            drawable,
+            tex: Default::default(),
+            model_transform: Default::default(),
+            gl_fns,
+        }
+    }
+
+    /// # Safety
+    /// FFI call
+    pub unsafe fn use_program(&self) {
+        self.gl_fns.UseProgram(self.program);
+    }
+
+    /// # Safety
+    /// FFI call
+    pub unsafe fn delete_gl(&self) {
+        let gl = &self.gl_fns;
+        gl.DeleteProgram(self.program);
+
+        // Delete buffers
+        match &self.drawable {
+            Drawable::Indexed(indexed_elements) => {
+                gl.DeleteBuffers(1, &indexed_elements.ebo);
+                gl.DeleteBuffers(1, &indexed_elements.vbo);
+            }
+            Drawable::Array(array) => {
+                gl.DeleteBuffers(1, &array.vbo);
+            }
+        }
+        // Delete vertex array
+        gl.DeleteVertexArrays(1, &self.vao);
+
+        // Delete Texture
+        if let Some(t) = &self.tex {
+            gl.DeleteTextures(1, &t.tex);
+        }
+    }
+}
+
+impl Drop for Shader {
+    fn drop(&mut self) {
+        unsafe { self.delete_gl() };
+    }
+}
+
 pub trait GlslPass {
     // Create GPU resources; should be idempotent or guarded by internal state.
     fn init(&mut self, gl_fns: Arc<Gles2>, mat3d: Mat3DUpdate);
@@ -11,16 +101,56 @@ pub trait GlslPass {
     // Per-frame updates (uniforms, buffers, animations). Caller ensures active shader
     fn update(&mut self, mat3d: Mat3DUpdate);
 
-    // Issue draw calls. Caller ensures active shader
-    fn draw(&self);
+    /// Issue draw calls. Caller ensures active shader
+    /// # Safety
+    /// FFI calls
+    unsafe fn draw(&self) {
+        let Some(glsl_pass) = self.get_shader() else {
+            log::warn!("Tried to render DirtSquare before init");
+            return;
+        };
+        let gl = &glsl_pass.gl_fns;
+
+        if let Some(tex) = &glsl_pass.tex {
+            gl.BindTexture(tex.target, tex.tex);
+        }
+        gl.BindVertexArray(glsl_pass.vao);
+
+        match &glsl_pass.drawable {
+            Drawable::Indexed(indexed_elements) => {
+                gl.BindBuffer(gl::ARRAY_BUFFER, indexed_elements.vbo);
+                gl.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, indexed_elements.ebo);
+                gl.DrawElements(
+                    gl::TRIANGLES,
+                    indexed_elements.index_count as i32,
+                    gl::UNSIGNED_INT,
+                    std::ptr::null(),
+                );
+            }
+            Drawable::Array(array) => {
+                gl.BindBuffer(gl::ARRAY_BUFFER, array.vbo);
+                for i in 0..array.len {
+                    gl.DrawArrays(
+                        gl::TRIANGLE_STRIP,
+                        (i * array.offset) as i32,
+                        array.count as i32,
+                    );
+                }
+            }
+        }
+    }
 
     // gl FFI getter
-    fn get_shader(&self) -> u32;
+    fn get_shader(&self) -> Option<&Shader>;
 
-    fn update_draw(&mut self, mat3d: Mat3DUpdate, gl: &Gles2) {
-        unsafe { gl.UseProgram(self.get_shader()) };
+    fn update_draw(&mut self, mat3d: Mat3DUpdate) {
+        let Some(shader) = self.get_shader() else {
+            log::warn!("Called update_draw on unitialized GlslPass");
+            return;
+        };
+        unsafe { shader.use_program() }
         self.update(mat3d);
-        self.draw();
+        unsafe { self.draw() };
     }
 }
 

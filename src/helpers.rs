@@ -1,7 +1,4 @@
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use crate::gl::{self, Gles2};
 
@@ -69,16 +66,6 @@ impl Mat3DUpdate {
     pub fn has_some(&self) -> bool {
         self.model.is_some() || self.projection.is_some() || self.view.is_some()
     }
-}
-
-#[derive(Clone)]
-pub struct Shader {
-    pub program: gl::types::GLuint,
-    pub vao: gl::types::GLuint,
-    pub vbo: gl::types::GLuint,
-    pub tex: Option<gl::types::GLuint>,
-    pub model_transform: glam::Mat4,
-    pub gl_fns: Arc<Gles2>,
 }
 
 pub struct FpsCounter {

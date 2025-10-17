@@ -29,6 +29,8 @@ use crate::camera::{Camera, CameraMovement};
 use crate::entities::Entity;
 use crate::entities::dirt_cube::DirtCube;
 use crate::entities::hello_triangle::HelloTriangle;
+use crate::entities::utah_teapot::UtahTeapot;
+// use crate::entities::utah_teapot::UtahTeapot;
 use crate::gl::{self};
 use crate::helpers::{FpsCounter, GlPosition, Mat3DUpdate};
 use crate::renderer::shader::GlslPass;
@@ -168,7 +170,6 @@ impl ApplicationHandler for App {
         const FLOOR_SIDE: usize = 10;
         const CS: f32 = 0.5;
         let mut cubes_floor = vec![];
-        // let mut triangles = vec![];
 
         for i in 0..FLOOR_SIDE {
             cubes_floor.push(GlPosition::new(i as f32 * CS, 0.0, i as f32 * CS));
@@ -177,14 +178,19 @@ impl ApplicationHandler for App {
                 cubes_floor.push(GlPosition::new(i as f32 * CS, 0.0, (i + j) as f32 * CS));
             }
         }
+        let tp = FLOOR_SIDE as f32 / 2.0 * CS;
 
         let mut entities: Vec<Box<dyn Entity>> = vec![
-            // Box::new(HelloTriangle::new(triangles)),
+            Box::new(HelloTriangle::new(vec![(
+                GlPosition::new(tp, CS * 2.0, tp),
+                CS,
+            )])),
             // Box::new(DirtSquare::new(vec![Square {
             //     bottom_left: GlPosition::new(-0.5, -0.5, 0.0),
             //     top_right: GlPosition::new(-0.3, -0.3, 0.0),
             // }])),
             Box::new(DirtCube::new(cubes_floor, 0.5)),
+            Box::new(UtahTeapot::new(vec![GlPosition::new(0.0, 1.0, 0.0)])),
         ];
 
         let dimensions = self
