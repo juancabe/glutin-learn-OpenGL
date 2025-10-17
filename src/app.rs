@@ -190,7 +190,7 @@ impl ApplicationHandler for App {
             //     top_right: GlPosition::new(-0.3, -0.3, 0.0),
             // }])),
             Box::new(DirtCube::new(cubes_floor, 0.5)),
-            Box::new(UtahTeapot::new(vec![GlPosition::new(0.0, 1.0, 0.0)])),
+            Box::new(UtahTeapot::new(GlPosition::new(tp, CS, tp))),
         ];
 
         let dimensions = self

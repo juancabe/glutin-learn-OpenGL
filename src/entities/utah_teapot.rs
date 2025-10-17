@@ -9,14 +9,14 @@ use crate::{
 
 #[derive(Clone)]
 pub struct UtahTeapot {
-    instances: Vec<GlPosition>,
+    position: GlPosition,
     shader: Option<Shader>,
 }
 
 impl UtahTeapot {
-    pub fn new(instances: Vec<GlPosition>) -> Self {
+    pub fn new(position: GlPosition) -> Self {
         Self {
-            instances,
+            position,
             shader: None,
         }
     }
@@ -26,7 +26,7 @@ impl GlslPass for UtahTeapot {
     fn init(
         &mut self,
         gl_fns: std::sync::Arc<crate::gl::Gles2>,
-        mat3d: crate::helpers::Mat3DUpdate,
+        mut mat3d: crate::helpers::Mat3DUpdate,
     ) {
         let lo = LoadOptions {
             triangulate: true,
@@ -126,6 +126,11 @@ impl GlslPass for UtahTeapot {
                 index_count: indices.len(),
             }));
         }
+
+        mat3d.model = Some(
+            glam::Mat4::from_scale(glam::Vec3::splat(0.5))
+                * glam::Mat4::from_translation(self.position),
+        );
 
         unsafe {
             mat3d.set_uniforms(&gl_fns, program);
