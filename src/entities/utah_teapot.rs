@@ -48,16 +48,7 @@ impl GlslPass for UtahTeapot {
             );
         }
 
-        let models = models.first().unwrap();
-
-        let vertex_data = &models.mesh.positions;
-        let indices = &models.mesh.indices;
-
         let program;
-        let mut vao;
-        let mut vbo;
-        // indices
-        let mut ebo;
 
         unsafe {
             program = gl_fns.CreateProgram();
@@ -76,60 +67,76 @@ impl GlslPass for UtahTeapot {
             gl_fns.DeleteShader(fragment_shader);
 
             gl_fns.UseProgram(program);
-
-            vao = std::mem::zeroed();
-            gl_fns.GenVertexArrays(1, &mut vao);
-            gl_fns.BindVertexArray(vao);
-
-            vbo = std::mem::zeroed();
-            gl_fns.GenBuffers(1, &mut vbo);
-            gl_fns.BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl_fns.BufferData(
-                gl::ARRAY_BUFFER,
-                (vertex_data.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
-                vertex_data.as_ptr() as *const _,
-                gl::STATIC_DRAW,
-            );
-
-            // indices
-            ebo = std::mem::zeroed();
-            gl_fns.GenBuffers(1, &mut ebo);
-            gl_fns.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-            gl_fns.BufferData(
-                gl::ELEMENT_ARRAY_BUFFER,
-                (indices.len() * std::mem::size_of::<u32>()) as gl::types::GLsizeiptr,
-                indices.as_ptr() as *const _,
-                gl::STATIC_DRAW,
-            );
-
-            mat3d.set_uniforms(&gl_fns, program);
-
-            let pos_attrib = gl_fns.GetAttribLocation(program, c"position".as_ptr() as *const _);
-            gl_fns.VertexAttribPointer(
-                pos_attrib as gl::types::GLuint,
-                3,
-                gl::FLOAT,
-                0,
-                3 * std::mem::size_of::<f32>() as gl::types::GLsizei,
-                std::ptr::null(),
-            );
-
-            gl_fns.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
         }
 
-        let drawable = Drawable::Indexed(IndexedElements {
-            ebo,
-            vbo,
-            index_count: indices.len(),
-        });
+        let mut drawables = vec![];
+
+        for model in &models {
+            let vertex_data = &model.mesh.positions;
+            let indices = &model.mesh.indices;
+            let mut ebo;
+            let mut vbo;
+            let mut vao;
+
+            unsafe {
+                vao = std::mem::zeroed();
+                gl_fns.GenVertexArrays(1, &mut vao);
+                gl_fns.BindVertexArray(vao);
+
+                vbo = std::mem::zeroed();
+                gl_fns.GenBuffers(1, &mut vbo);
+                gl_fns.BindBuffer(gl::ARRAY_BUFFER, vbo);
+                gl_fns.BufferData(
+                    gl::ARRAY_BUFFER,
+                    (vertex_data.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
+                    vertex_data.as_ptr() as *const _,
+                    gl::STATIC_DRAW,
+                );
+
+                // indices
+                ebo = std::mem::zeroed();
+                gl_fns.GenBuffers(1, &mut ebo);
+                gl_fns.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
+                gl_fns.BufferData(
+                    gl::ELEMENT_ARRAY_BUFFER,
+                    (indices.len() * std::mem::size_of::<u32>()) as gl::types::GLsizeiptr,
+                    indices.as_ptr() as *const _,
+                    gl::STATIC_DRAW,
+                );
+
+                // attribute descriptor for this VBO
+                let pos_attrib =
+                    gl_fns.GetAttribLocation(program, c"position".as_ptr() as *const _);
+                gl_fns.VertexAttribPointer(
+                    pos_attrib as gl::types::GLuint,
+                    3,
+                    gl::FLOAT,
+                    0,
+                    3 * std::mem::size_of::<f32>() as gl::types::GLsizei,
+                    std::ptr::null(),
+                );
+
+                gl_fns.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
+            }
+
+            drawables.push(Drawable::Indexed(IndexedElements {
+                ebo,
+                vbo,
+                vao,
+                index_count: indices.len(),
+            }));
+        }
+
+        unsafe {
+            mat3d.set_uniforms(&gl_fns, program);
+        }
 
         self.shader = Some(Shader {
             program,
-            vao,
             model_transform: mat3d
                 .model
                 .expect("mat3d as init should at least be IDENTITY"),
-            drawable,
+            drawables,
             gl_fns,
             tex: Default::default(),
         })

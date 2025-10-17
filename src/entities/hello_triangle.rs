@@ -57,9 +57,10 @@ impl HelloTriangle {
             .collect();
 
         if let Some(Shader {
-            gl_fns, drawable, ..
+            gl_fns, drawables, ..
         }) = &self.shader
         {
+            let drawable = drawables.first().expect("It should be there");
             let Drawable::Array(array) = drawable else {
                 panic!("The drawable in HelloTriangle mutated illegally");
             };
@@ -165,19 +166,21 @@ impl GlslPass for HelloTriangle {
         }
 
         let drawable = Drawable::Array(Array {
+            vao,
             vbo,
             len: self.instances.len(),
             offset: 3,
             count: 3,
         });
 
+        let drawables = vec![drawable];
+
         self.shader = Some(Shader {
             program,
-            vao,
             model_transform: mat3d
                 .model
                 .expect("mat3d as init should be at least IDENTITY"),
-            drawable,
+            drawables,
             tex: Default::default(),
             gl_fns,
         })

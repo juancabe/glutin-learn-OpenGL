@@ -183,20 +183,22 @@ impl GlslPass for DirtSquare {
         };
 
         let drawable = Drawable::Array(Array {
+            vao,
             vbo,
             len: self.instances.len(),
             offset: 4,
             count: 4,
         });
 
+        let drawables = vec![drawable];
+
         self.shader = Some(Shader {
             program,
-            vao,
             model_transform: mat3d
                 .model
                 .expect("mat3d as_init should be at least IDENTITY"),
             tex: Some(tex),
-            drawable,
+            drawables,
             gl_fns,
         })
     }
