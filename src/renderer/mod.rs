@@ -1,4 +1,4 @@
-use std::{ffi::CStr, sync::Arc};
+use std::{ffi::CStr, rc::Rc};
 
 use glam::USizeVec2;
 
@@ -12,11 +12,11 @@ pub mod shader;
 
 pub struct Renderer {
     window_dimensions: glam::USizeVec2,
-    gl: Arc<gl::Gl>,
+    gl: Rc<gl::Gl>,
 }
 
 impl Renderer {
-    pub fn new(gl_fns: Arc<Gles2>, window_dimensions: glam::USizeVec2) -> Self {
+    pub fn new(gl_fns: Rc<Gles2>, window_dimensions: glam::USizeVec2) -> Self {
         if let Some(renderer) = get_gl_string(&gl_fns, gl::RENDERER) {
             log::info!("Running on {}", renderer.to_string_lossy());
         }

@@ -4,6 +4,7 @@ use glutin::{config::GetGlConfig, context::NotCurrentContext};
 use glutin_winit::GlWindow;
 use raw_window_handle::HasWindowHandle;
 use std::ffi::CString;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use std::vec;
@@ -151,7 +152,7 @@ impl ApplicationHandler for App {
                 .get_proc_address(symbol.as_c_str())
                 .cast()
         });
-        let gl_fns = Arc::new(gl_fns);
+        let gl_fns = Rc::new(gl_fns);
 
         self.renderer.get_or_insert_with(|| {
             Renderer::new(

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     entities::Entity,
     gl,
@@ -79,7 +81,7 @@ impl DirtSquare {
 }
 
 impl GlslPass for DirtSquare {
-    fn init(&mut self, gl_fns: std::sync::Arc<crate::gl::Gles2>, mat3d: Mat3DUpdate) {
+    fn init(&mut self, gl_fns: Rc<crate::gl::Gles2>, mat3d: Mat3DUpdate) {
         let image = image::ImageReader::open("./assets/dirt.webp")
             .expect("assets/dirt.webp should be readable")
             .decode()

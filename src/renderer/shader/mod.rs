@@ -2,7 +2,7 @@ use crate::{
     gl::{self, Gles2},
     helpers::Mat3DUpdate,
 };
-use std::{ffi::CStr, sync::Arc};
+use std::{ffi::CStr, rc::Rc};
 
 #[derive(Clone, Debug, Default)]
 pub struct IndexedElements {
@@ -43,7 +43,7 @@ pub struct Shader {
     pub drawables: Vec<Drawable>,
     pub tex: Option<Tex>,
     pub model_transform: glam::Mat4,
-    pub gl_fns: Arc<Gles2>,
+    pub gl_fns: Rc<Gles2>,
 }
 
 impl Shader {
@@ -89,7 +89,7 @@ impl Drop for Shader {
 
 pub trait GlslPass {
     // Create GPU resources; should be idempotent or guarded by internal state.
-    fn init(&mut self, gl_fns: Arc<Gles2>, mat3d: Mat3DUpdate);
+    fn init(&mut self, gl_fns: Rc<Gles2>, mat3d: Mat3DUpdate);
 
     // Per-frame updates (uniforms, buffers, animations). Caller ensures active shader
     fn update(&mut self, mat3d: Mat3DUpdate);

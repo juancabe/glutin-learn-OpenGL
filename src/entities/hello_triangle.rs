@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::{rc::Rc, time::Instant};
 
 use crate::{
     entities::Entity,
@@ -91,7 +91,7 @@ impl HelloTriangle {
 }
 
 impl GlslPass for HelloTriangle {
-    fn init(&mut self, gl_fns: Arc<Gles2>, mat3d: Mat3DUpdate) {
+    fn init(&mut self, gl_fns: Rc<Gles2>, mat3d: Mat3DUpdate) {
         let program;
         let mut vao;
         let mut vbo;

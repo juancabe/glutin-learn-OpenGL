@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use tobj::LoadOptions;
 
 use crate::{
@@ -23,11 +25,7 @@ impl UtahTeapot {
 }
 
 impl GlslPass for UtahTeapot {
-    fn init(
-        &mut self,
-        gl_fns: std::sync::Arc<crate::gl::Gles2>,
-        mut mat3d: crate::helpers::Mat3DUpdate,
-    ) {
+    fn init(&mut self, gl_fns: Rc<crate::gl::Gles2>, mut mat3d: crate::helpers::Mat3DUpdate) {
         let lo = LoadOptions {
             triangulate: true,
             ..Default::default()

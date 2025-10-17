@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{
     entities::{
         Entity,
@@ -61,11 +63,7 @@ impl DirtCube {
 }
 
 impl GlslPass for DirtCube {
-    fn init(
-        &mut self,
-        gl_fns: std::sync::Arc<crate::gl::Gles2>,
-        mat3d: crate::helpers::Mat3DUpdate,
-    ) {
+    fn init(&mut self, gl_fns: Rc<crate::gl::Gles2>, mat3d: crate::helpers::Mat3DUpdate) {
         self.squares.init(gl_fns.clone(), mat3d);
     }
 
