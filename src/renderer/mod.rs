@@ -36,17 +36,19 @@ impl Renderer {
         }
     }
 
-    pub fn draw<'a, I>(&mut self, objects: I, mat3d: Mat3DUpdate)
-    where
-        I: Iterator<Item = &'a mut dyn GlslPass>,
-    {
+    pub fn clear(&self) {
         unsafe {
             self.gl.ClearColor(0.1, 0.1, 0.1, 1.0);
             self.gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
+    }
 
+    pub fn draw<'a, I>(&mut self, objects: I, mat3d: Mat3DUpdate, light_pos: Option<glam::Vec3>)
+    where
+        I: Iterator<Item = &'a mut dyn GlslPass>,
+    {
         for obj in objects {
-            obj.update_draw(mat3d);
+            obj.update_draw(mat3d, light_pos);
         }
     }
 
@@ -68,10 +70,3 @@ fn get_gl_string(gl: &gl::Gl, variant: gl::types::GLenum) -> Option<&'static CSt
         (!s.is_null()).then(|| CStr::from_ptr(s.cast()))
     }
 }
-
-// #[rustfmt::skip]
-// static VERTEX_DATA: [f32; 15] = [
-//     -0.5, -0.5,  1.0,  0.0,  0.0,
-//      0.0,  0.5,  0.0,  1.0,  0.0,
-//      0.5, -0.5,  0.0,  0.0,  1.0,
-// ];

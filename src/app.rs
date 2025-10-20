@@ -1,3 +1,4 @@
+use glam::Vec3;
 use glutin::context::{ContextApi, ContextAttributesBuilder, Version};
 use glutin::display::GetGlDisplay;
 use glutin::{config::GetGlConfig, context::NotCurrentContext};
@@ -5,7 +6,6 @@ use glutin_winit::GlWindow;
 use raw_window_handle::HasWindowHandle;
 use std::ffi::CString;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Instant;
 use std::vec;
 use std::{error::Error, num::NonZeroU32};
@@ -28,8 +28,9 @@ use winit::{
 
 use crate::camera::{Camera, CameraMovement};
 use crate::entities::Entity;
-use crate::entities::dirt_cube::DirtCube;
 use crate::entities::hello_triangle::HelloTriangle;
+use crate::entities::sun::Sun;
+use crate::entities::tex_cube::TexCube;
 use crate::entities::utah_teapot::UtahTeapot;
 // use crate::entities::utah_teapot::UtahTeapot;
 use crate::gl::{self};
@@ -47,6 +48,7 @@ struct AppState {
     // raw-window-handle.
     window: Window,
     entities: Vec<Box<dyn Entity>>,
+    sun: Sun,
     camera: Camera,
     last_frame: Instant,
 }
@@ -182,17 +184,20 @@ impl ApplicationHandler for App {
         let tp = FLOOR_SIDE as f32 / 2.0 * CS;
 
         let mut entities: Vec<Box<dyn Entity>> = vec![
-            Box::new(HelloTriangle::new(vec![(
-                GlPosition::new(tp, CS * 2.0, tp),
-                CS,
-            )])),
-            // Box::new(DirtSquare::new(vec![Square {
-            //     bottom_left: GlPosition::new(-0.5, -0.5, 0.0),
-            //     top_right: GlPosition::new(-0.3, -0.3, 0.0),
-            // }])),
-            Box::new(DirtCube::new(cubes_floor, 0.5)),
-            Box::new(UtahTeapot::new(GlPosition::new(tp, CS, tp))),
+            Box::new(HelloTriangle::new((GlPosition::new(tp, CS * 2.0, tp), CS))),
+            Box::new(TexCube::new(
+                cubes_floor,
+                0.5,
+                // Dirt cubes floor
+                Some("./assets/dirt.webp".into()),
+            )),
+            Box::new(UtahTeapot::new(
+                GlPosition::new(tp, CS, tp),
+                Vec3::new(1.0, 0.2, 0.2),
+            )),
         ];
+
+        let mut sun = Sun::new(GlPosition::new(tp, 10.0, tp));
 
         let dimensions = self
             .renderer
@@ -204,9 +209,11 @@ impl ApplicationHandler for App {
 
         let entities_transformations_3d = Mat3DUpdate::default_from_dimensions(&dimensions);
 
+        // Init Glsl for drawables
         for entity in entities.iter_mut() {
             entity.init(gl_fns.clone(), entities_transformations_3d);
         }
+        sun.init(gl_fns, entities_transformations_3d);
 
         assert!(
             self.state
@@ -215,7 +222,8 @@ impl ApplicationHandler for App {
                     entities,
                     gl_surface,
                     window,
-                    camera: Camera::default()
+                    camera: Camera::default(),
+                    sun,
                 })
                 .is_none()
         );
@@ -336,6 +344,7 @@ impl ApplicationHandler for App {
             window,
             entities,
             camera,
+            sun,
         }) = self.state.as_mut()
         {
             let renderer = self.renderer.as_mut().unwrap();
@@ -345,6 +354,7 @@ impl ApplicationHandler for App {
 
             if let Some(fps) = self.fps_counter.tick() {
                 log::info!("FPS: {fps}");
+                log::info!("Sun position: {:?}", sun.get_pos());
             }
 
             let gl_context = self.gl_context.as_ref().unwrap();
@@ -358,7 +368,9 @@ impl ApplicationHandler for App {
                 ..Default::default()
             };
 
-            renderer.draw(renderer_refs, mat3d);
+            renderer.clear();
+            renderer.draw(renderer_refs, mat3d, Some(sun.get_pos()));
+            renderer.draw([sun as &mut dyn GlslPass].into_iter(), mat3d, None);
 
             window.request_redraw();
 

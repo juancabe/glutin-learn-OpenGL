@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use glam::Vec3;
 use tobj::LoadOptions;
 
 use crate::{
@@ -12,16 +13,25 @@ use crate::{
 #[derive(Clone)]
 pub struct UtahTeapot {
     position: GlPosition,
+    color: Vec3,
     shader: Option<Shader>,
 }
 
 impl UtahTeapot {
-    pub fn new(position: GlPosition) -> Self {
+    pub fn new(position: GlPosition, color: Vec3) -> Self {
         Self {
+            color,
             position,
             shader: None,
         }
     }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Vertex {
+    position: Vec3,
+    normal: Vec3,
 }
 
 impl GlslPass for UtahTeapot {
@@ -40,9 +50,13 @@ impl GlslPass for UtahTeapot {
 
         for model in &models {
             log::info!(
-                "Model name: {}; Vertices: {}",
+                "Model name: {}; Indices: {}, Positions: {}, Normals: {}, N_Indices: {}, N_Indices_max: {:?}",
                 model.name,
-                model.mesh.indices.len()
+                model.mesh.indices.len(),
+                model.mesh.positions.len(),
+                model.mesh.normals.len(),
+                model.mesh.normal_indices.len(),
+                model.mesh.normal_indices.iter().max(),
             );
         }
 
@@ -70,11 +84,25 @@ impl GlslPass for UtahTeapot {
         let mut drawables = vec![];
 
         for model in &models {
-            let vertex_data = &model.mesh.positions;
-            let indices = &model.mesh.indices;
+            let positions = &model.mesh.positions;
+            let position_i = &model.mesh.indices;
+            let normals = &model.mesh.normals;
+            let normal_i = &model.mesh.normal_indices;
             let mut ebo;
             let mut vbo;
             let mut vao;
+
+            let vertex_data: Vec<Vertex> = position_i
+                .iter()
+                .zip(normal_i)
+                .map(|(p_i, n_i)| (*p_i as usize, *n_i as usize))
+                .map(|(p_i, n_i)| (p_i * 3, n_i * 3))
+                .map(|(p_i, n_i)| Vertex {
+                    position: Vec3::from_slice(&positions[p_i..p_i + 3]),
+                    normal: Vec3::from_slice(&normals[n_i..n_i + 3]),
+                })
+                .collect();
+            let final_indices: Vec<u32> = (0..vertex_data.len() as u32).collect();
 
             unsafe {
                 vao = std::mem::zeroed();
@@ -86,7 +114,7 @@ impl GlslPass for UtahTeapot {
                 gl_fns.BindBuffer(gl::ARRAY_BUFFER, vbo);
                 gl_fns.BufferData(
                     gl::ARRAY_BUFFER,
-                    (vertex_data.len() * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
+                    (vertex_data.len() * 6 * std::mem::size_of::<f32>()) as gl::types::GLsizeiptr,
                     vertex_data.as_ptr() as *const _,
                     gl::STATIC_DRAW,
                 );
@@ -97,31 +125,43 @@ impl GlslPass for UtahTeapot {
                 gl_fns.BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
                 gl_fns.BufferData(
                     gl::ELEMENT_ARRAY_BUFFER,
-                    (indices.len() * std::mem::size_of::<u32>()) as gl::types::GLsizeiptr,
-                    indices.as_ptr() as *const _,
+                    (final_indices.len() * std::mem::size_of::<u32>()) as gl::types::GLsizeiptr,
+                    final_indices.as_ptr() as *const _,
                     gl::STATIC_DRAW,
                 );
 
-                // attribute descriptor for this VBO
                 let pos_attrib =
                     gl_fns.GetAttribLocation(program, c"position".as_ptr() as *const _);
+                assert_ne!(pos_attrib, -1);
                 gl_fns.VertexAttribPointer(
                     pos_attrib as gl::types::GLuint,
                     3,
                     gl::FLOAT,
                     0,
-                    3 * std::mem::size_of::<f32>() as gl::types::GLsizei,
+                    6 * std::mem::size_of::<f32>() as gl::types::GLsizei,
                     std::ptr::null(),
                 );
 
+                let norm_attrib = gl_fns.GetAttribLocation(program, c"normal".as_ptr() as *const _);
+                assert_ne!(norm_attrib, -1);
+                gl_fns.VertexAttribPointer(
+                    norm_attrib as gl::types::GLuint,
+                    3,
+                    gl::FLOAT,
+                    0,
+                    6 * std::mem::size_of::<f32>() as gl::types::GLsizei,
+                    (3 * std::mem::size_of::<f32>()) as *const _,
+                );
+
                 gl_fns.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
+                gl_fns.EnableVertexAttribArray(norm_attrib as gl::types::GLuint);
             }
 
             drawables.push(Drawable::Indexed(IndexedElements {
                 ebo,
                 vbo,
                 vao,
-                index_count: indices.len(),
+                index_count: position_i.len(),
             }));
         }
 
@@ -132,6 +172,12 @@ impl GlslPass for UtahTeapot {
 
         unsafe {
             mat3d.set_uniforms(&gl_fns, program);
+        }
+
+        // Color uniform
+        unsafe {
+            let color_loc = gl_fns.GetUniformLocation(program, c"uColor".as_ptr() as *const _);
+            gl_fns.Uniform3f(color_loc, self.color.x, self.color.y, self.color.z);
         }
 
         self.shader = Some(Shader {
@@ -145,10 +191,21 @@ impl GlslPass for UtahTeapot {
         })
     }
 
-    fn update(&mut self, mat3d: crate::helpers::Mat3DUpdate) {
+    fn update(&mut self, mat3d: crate::helpers::Mat3DUpdate, light_pos: Option<Vec3>) {
         if let Some(shader) = &self.shader {
             unsafe {
                 mat3d.set_uniforms(&shader.gl_fns, shader.program);
+            }
+            // Light position uniform
+            if let Some(light_pos) = light_pos {
+                unsafe {
+                    let light_pos_loc = shader
+                        .gl_fns
+                        .GetUniformLocation(shader.program, c"uLightPos".as_ptr() as *const _);
+                    shader
+                        .gl_fns
+                        .Uniform3f(light_pos_loc, light_pos.x, light_pos.y, light_pos.z);
+                }
             }
         }
     }
@@ -168,18 +225,40 @@ uniform mat4 view;
 uniform mat4 projection;
 
 layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 normal;
+
+out vec3 fragNorm;
+out vec3 fragPos;
 
 void main() {
     gl_Position = projection * view * model * vec4(position, 1.0);
+    fragNorm = normal;
+    fragPos = vec3(model * vec4(position, 1.0));
+    // Use the upper 3x3 of the model matrix for rotation/scaling
+    fragNorm = mat3(transpose(inverse(model))) * normal;  
+
+
 }
 \0";
 
 const FRAGMENT_SHADER_SOURCE: &[u8] = b"
 #version 410 core
 
+uniform vec3 uColor;
+uniform vec3 uLightPos;
+
 layout(location = 0) out vec4 FragColor;
 
+in vec3 fragNorm;
+in vec3 fragPos;
+
 void main() {
-    FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    vec3 norm = normalize(fragNorm);
+    vec3 lightDir = normalize(uLightPos - fragPos);
+    float diffuse = max(dot(norm, lightDir), 0.0);
+
+    float ambientStrenght = 0.1;
+    vec3 result = uColor * (ambientStrenght + diffuse);
+    FragColor = vec4(result, 1.0);
 }
 \0";

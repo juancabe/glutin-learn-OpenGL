@@ -1,9 +1,9 @@
-use std::rc::Rc;
+use std::{path::PathBuf, rc::Rc};
 
 use crate::{
     entities::{
         Entity,
-        dirt_square::{DirtSquare, Square},
+        tex_square::{Square, TexSquare},
     },
     helpers::GlPosition,
     renderer::shader::{GlslPass, Shader},
@@ -45,30 +45,31 @@ fn build_faces(pos: &GlPosition, side_len: f32) -> [Square; 6] {
     ]
 }
 
-pub struct DirtCube {
-    squares: DirtSquare,
+pub struct TexCube {
+    squares: TexSquare,
 }
 
-impl DirtCube {
-    pub fn new(positions: Vec<GlPosition>, side_len: f32) -> Self {
-        DirtCube {
-            squares: DirtSquare::new(
+impl TexCube {
+    pub fn new(positions: Vec<GlPosition>, side_len: f32, tex: Option<PathBuf>) -> Self {
+        TexCube {
+            squares: TexSquare::new(
                 positions
                     .into_iter()
                     .flat_map(|p| build_faces(&p, side_len))
                     .collect(),
+                tex,
             ),
         }
     }
 }
 
-impl GlslPass for DirtCube {
+impl GlslPass for TexCube {
     fn init(&mut self, gl_fns: Rc<crate::gl::Gles2>, mat3d: crate::helpers::Mat3DUpdate) {
         self.squares.init(gl_fns.clone(), mat3d);
     }
 
-    fn update(&mut self, mat3d: crate::helpers::Mat3DUpdate) {
-        self.squares.update(mat3d);
+    fn update(&mut self, mat3d: crate::helpers::Mat3DUpdate, light_pos: Option<glam::Vec3>) {
+        self.squares.update(mat3d, light_pos);
     }
 
     unsafe fn draw(&self) {
@@ -80,4 +81,4 @@ impl GlslPass for DirtCube {
     }
 }
 
-impl Entity for DirtCube {}
+impl Entity for TexCube {}

@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{path::PathBuf, rc::Rc};
 
 use crate::{
     entities::Entity,
@@ -66,26 +66,30 @@ impl Square {
     }
 }
 
-pub struct DirtSquare {
+pub struct TexSquare {
     shader: Option<Shader>,
     instances: Vec<Square>,
+    texture: Option<PathBuf>,
 }
 
-impl DirtSquare {
-    pub fn new(instances: Vec<Square>) -> Self {
+impl TexSquare {
+    pub fn new(instances: Vec<Square>, texture: Option<PathBuf>) -> Self {
         Self {
             shader: None,
             instances,
+            texture,
         }
     }
 }
 
-impl GlslPass for DirtSquare {
+impl GlslPass for TexSquare {
     fn init(&mut self, gl_fns: Rc<crate::gl::Gles2>, mat3d: Mat3DUpdate) {
-        let image = image::ImageReader::open("./assets/dirt.webp")
-            .expect("assets/dirt.webp should be readable")
-            .decode()
-            .expect("assets/dirt.webp should be decodable");
+        let image = self.texture.as_ref().map(|path| {
+            image::ImageReader::open(path)
+                .unwrap_or_else(|_| panic!("{path:?} should be readable"))
+                .decode()
+                .unwrap_or_else(|_| panic!("{path:?} should be decodable"))
+        });
 
         let program;
         let mut vao;
@@ -100,7 +104,7 @@ impl GlslPass for DirtSquare {
             .flat_map(|(p, t)| [p.x, p.y, p.z, t.x, t.y])
             .collect();
 
-        let mut tex;
+        let tex;
 
         unsafe {
             program = gl_fns.CreateProgram();
@@ -161,28 +165,31 @@ impl GlslPass for DirtSquare {
             gl_fns.EnableVertexAttribArray(tex_attrib as gl::types::GLuint);
 
             // -- TEXTURE
-            tex = std::mem::zeroed();
-            gl_fns.GenTextures(1, &mut tex);
-            gl_fns.BindTexture(gl::TEXTURE_2D, tex);
-            gl_fns.TexImage2D(
-                gl::TEXTURE_2D,
-                0,
-                gl::RGB as i32,
-                image.width() as i32,
-                image.height() as i32,
-                0,
-                gl::RGB,
-                gl::UNSIGNED_BYTE,
-                image.to_rgb8().as_raw().as_ptr() as *const _,
-            );
-            gl_fns.GenerateMipmap(gl::TEXTURE_2D);
+            tex = image.map(|image| {
+                let mut tex_id = std::mem::zeroed();
+                gl_fns.GenTextures(1, &mut tex_id);
+                gl_fns.BindTexture(gl::TEXTURE_2D, tex_id);
+                gl_fns.TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    gl::RGB as i32,
+                    image.width() as i32,
+                    image.height() as i32,
+                    0,
+                    gl::RGB,
+                    gl::UNSIGNED_BYTE,
+                    image.to_rgb8().as_raw().as_ptr() as *const _,
+                );
+                gl_fns.GenerateMipmap(gl::TEXTURE_2D);
+                tex_id
+            });
             // --
         }
 
-        let tex = Tex {
+        let tex = tex.map(|tex| Tex {
             tex,
             target: gl::TEXTURE_2D,
-        };
+        });
 
         let drawable = Drawable::Array(Array {
             vao,
@@ -199,13 +206,13 @@ impl GlslPass for DirtSquare {
             model_transform: mat3d
                 .model
                 .expect("mat3d as_init should be at least IDENTITY"),
-            tex: Some(tex),
+            tex,
             drawables,
             gl_fns,
         })
     }
 
-    fn update(&mut self, mat3d: Mat3DUpdate) {
+    fn update(&mut self, mat3d: Mat3DUpdate, _light_pos: Option<glam::Vec3>) {
         if let Some(shader) = &mut self.shader {
             if let Some(model_updated) = mat3d.model {
                 shader.model_transform = model_updated;
@@ -214,39 +221,12 @@ impl GlslPass for DirtSquare {
         }
     }
 
-    // fn draw(&self) {
-    //     if let Some(glsl_pass) = &self.glsl_pass {
-    //         log::debug!("Calling draw on DirtSquare");
-    //         let gl = &glsl_pass.gl_fns;
-    //         let program = glsl_pass.program;
-    //         let vao = glsl_pass.vao;
-    //         let vbo = glsl_pass.vbo;
-    //         let tex = glsl_pass.tex.expect("Tex should have being set");
-    //
-    //         unsafe {
-    //             gl.UseProgram(program);
-    //
-    //             gl.BindTexture(gl::TEXTURE_2D, tex);
-    //             gl.BindVertexArray(vao);
-    //             gl.BindBuffer(gl::ARRAY_BUFFER, vbo);
-    //
-    //             // NOTE: This should be batched
-    //             for i in 0..self.instances.len() {
-    //                 let offset = i * 4;
-    //                 gl.DrawArrays(gl::TRIANGLE_STRIP, offset as i32, 4);
-    //             }
-    //         }
-    //     } else {
-    //         log::warn!("Tried to render DirtSquare before init")
-    //     }
-    // }
-
     fn get_shader(&self) -> Option<&Shader> {
         self.shader.as_ref()
     }
 }
 
-impl Entity for DirtSquare {}
+impl Entity for TexSquare {}
 
 const VERTEX_SHADER_SOURCE: &[u8] = b"
 #version 410 core
@@ -272,10 +252,10 @@ const FRAGMENT_SHADER_SOURCE: &[u8] = b"
 layout(location = 0) out vec4 FragColor;
 
 in vec2 TexCoord;
-uniform sampler2D dirtTexture;
+uniform sampler2D tex;
 
 
 void main() {
-    FragColor = texture(dirtTexture, TexCoord);
+    FragColor = texture(tex, TexCoord);
 }
 \0";

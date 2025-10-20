@@ -92,14 +92,14 @@ pub trait GlslPass {
     fn init(&mut self, gl_fns: Rc<Gles2>, mat3d: Mat3DUpdate);
 
     // Per-frame updates (uniforms, buffers, animations). Caller ensures active shader
-    fn update(&mut self, mat3d: Mat3DUpdate);
+    fn update(&mut self, mat3d: Mat3DUpdate, light_pos: Option<glam::Vec3>);
 
     /// Issue draw calls. Caller ensures active shader
     /// # Safety
     /// FFI calls
     unsafe fn draw(&self) {
         let Some(glsl_pass) = self.get_shader() else {
-            log::warn!("Tried to render DirtSquare before init");
+            log::warn!("Tried to render /TODO: name/ before init");
             return;
         };
         let gl = &glsl_pass.gl_fns;
@@ -139,13 +139,13 @@ pub trait GlslPass {
     // gl FFI getter
     fn get_shader(&self) -> Option<&Shader>;
 
-    fn update_draw(&mut self, mat3d: Mat3DUpdate) {
+    fn update_draw(&mut self, mat3d: Mat3DUpdate, light_pos: Option<glam::Vec3>) {
         let Some(shader) = self.get_shader() else {
             log::warn!("Called update_draw on unitialized GlslPass");
             return;
         };
         unsafe { shader.use_program() }
-        self.update(mat3d);
+        self.update(mat3d, light_pos);
         unsafe { self.draw() };
     }
 }

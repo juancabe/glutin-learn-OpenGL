@@ -9,7 +9,8 @@ use crate::{
 
 #[derive(Clone)]
 pub struct HelloTriangle {
-    instances: Vec<[(GlPosition, GlColor); 3]>,
+    init_pos: GlPosition,
+    instance: [(GlPosition, GlColor); 3],
     last_second: u64,
     init: Instant,
     shader: Option<Shader>,
@@ -19,29 +20,25 @@ pub type Circumradius = f32;
 
 /// NOTE: We currently only draw the first instance
 impl HelloTriangle {
-    pub fn new(instances: Vec<(GlPosition, Circumradius)>) -> HelloTriangle {
-        let instances = instances
-            .into_iter()
-            .map(|(i, cr)| {
-                [
-                    (
-                        GlPosition::new(-1.0f32, -1.0f32, 0.0f32).normalize() * cr + i,
-                        GlColor::new(1.0f32, 0.0f32, 0.0f32, 1.0f32),
-                    ),
-                    (
-                        GlPosition::new(0.0f32, 1.0f32, 0.0f32).normalize() * cr + i,
-                        GlColor::new(0.0f32, 1.0f32, 0.0f32, 1.0f32),
-                    ),
-                    (
-                        GlPosition::new(1.0f32, -1.0f32, 0.0f32).normalize() * cr + i,
-                        GlColor::new(0.0f32, 0.0f32, 1.0f32, 1.0f32),
-                    ),
-                ]
-            })
-            .collect();
+    pub fn new((i, cr): (GlPosition, Circumradius)) -> HelloTriangle {
+        let instance = [
+            (
+                GlPosition::new(-1.0f32, -1.0f32, 0.0f32).normalize() * cr + i,
+                GlColor::new(1.0f32, 0.0f32, 0.0f32, 1.0f32),
+            ),
+            (
+                GlPosition::new(0.0f32, 1.0f32, 0.0f32).normalize() * cr + i,
+                GlColor::new(0.0f32, 1.0f32, 0.0f32, 1.0f32),
+            ),
+            (
+                GlPosition::new(1.0f32, -1.0f32, 0.0f32).normalize() * cr + i,
+                GlColor::new(0.0f32, 0.0f32, 1.0f32, 1.0f32),
+            ),
+        ];
 
         Self {
-            instances,
+            init_pos: i,
+            instance,
             last_second: 0,
             init: Instant::now(),
             shader: None,
@@ -50,8 +47,7 @@ impl HelloTriangle {
 
     fn apply_v_change_to_gpu(&self) {
         let vertex_data: Vec<f32> = self
-            .instances
-            .concat()
+            .instance
             .iter()
             .flat_map(|(p, c)| [p.x, p.y, p.z, c.x, c.y, c.z])
             .collect();
@@ -80,13 +76,11 @@ impl HelloTriangle {
     }
 
     fn rotate_vertex_colors_left(&mut self) {
-        for vert in self.instances.iter_mut() {
-            let mut colors = vert.map(|(_, c)| c);
-            colors.rotate_left(1);
-            vert[0].1 = colors[0];
-            vert[1].1 = colors[1];
-            vert[2].1 = colors[2];
-        }
+        let mut colors = self.instance.map(|(_, c)| c);
+        colors.rotate_left(1);
+        self.instance[0].1 = colors[0];
+        self.instance[1].1 = colors[1];
+        self.instance[2].1 = colors[2];
     }
 }
 
@@ -99,9 +93,7 @@ impl GlslPass for HelloTriangle {
         let mat3d = mat3d.as_init();
 
         let vertex_data: Vec<f32> = self
-            .instances
-            .clone()
-            .concat()
+            .instance
             .into_iter()
             .flat_map(|(p, c)| [p.x, p.y, p.z, c.x, c.y, c.z])
             .collect();
@@ -168,7 +160,7 @@ impl GlslPass for HelloTriangle {
         let drawable = Drawable::Array(Array {
             vao,
             vbo,
-            len: self.instances.len(),
+            len: self.instance.len(),
             offset: 3,
             count: 3,
         });
@@ -186,31 +178,7 @@ impl GlslPass for HelloTriangle {
         })
     }
 
-    // unsafe fn draw(&self) {
-    //     if let Some(glsl_pass) = &self.glsl_pass {
-    //         log::debug!(
-    //             "Drawing HelloTriangle with model_transform: {:?}",
-    //             glsl_pass.model_transform
-    //         );
-    //         let gl = &glsl_pass.gl_fns;
-    //         unsafe {
-    //             gl.BindVertexArray(glsl_pass.vao);
-    //             gl.BindBuffer(gl::ARRAY_BUFFER, glsl_pass.vbo);
-    //
-    //             // gl.DrawArrays(gl::TRIANGLES, 0, 3);
-    //
-    //             // NOTE: This should be batched
-    //             for i in (0..self.instances.len()).rev() {
-    //                 let offset = i * 3;
-    //                 gl.DrawArrays(gl::TRIANGLES, offset as i32, 3);
-    //             }
-    //         }
-    //     } else {
-    //         log::warn!("Tried to draw HelloTriangle before even initializing it")
-    //     }
-    // }
-
-    fn update(&mut self, mut mat3d: Mat3DUpdate) {
+    fn update(&mut self, mut mat3d: Mat3DUpdate, _light_pos: Option<glam::Vec3>) {
         let elapsed = self.init.elapsed();
         if elapsed.as_secs() > self.last_second {
             self.last_second = elapsed.as_secs();
@@ -227,7 +195,9 @@ impl GlslPass for HelloTriangle {
                 let next_spin_stop = f32::ceil(elapsed_s_f32 / spin_duration_s) * spin_duration_s;
                 let perc_of_rotation = (next_spin_stop - elapsed_s_f32) / spin_duration_s;
                 let rotation = 360.0 * perc_of_rotation;
-                shader.model_transform = glam::Mat4::from_rotation_y((rotation).to_radians());
+                shader.model_transform = glam::Mat4::from_translation(self.init_pos)
+                    * glam::Mat4::from_rotation_y((rotation).to_radians())
+                    * glam::Mat4::from_translation(-self.init_pos);
                 mat3d.model = Some(shader.model_transform);
             }
             unsafe { mat3d.set_uniforms(&shader.gl_fns, shader.program) };
