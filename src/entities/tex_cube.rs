@@ -68,8 +68,13 @@ impl GlslPass for TexCube {
         self.squares.init(gl_fns.clone(), mat3d);
     }
 
-    fn update(&mut self, mat3d: crate::helpers::Mat3DUpdate, light_pos: Option<glam::Vec3>) {
-        self.squares.update(mat3d, light_pos);
+    fn update(
+        &mut self,
+        mat3d: crate::helpers::Mat3DUpdate,
+        light_pos: Option<glam::Vec3>,
+        eye_pos: Option<glam::Vec3>,
+    ) {
+        self.squares.update(mat3d, light_pos, eye_pos);
     }
 
     unsafe fn draw(&self) {

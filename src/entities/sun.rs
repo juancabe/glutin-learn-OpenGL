@@ -56,7 +56,13 @@ impl GlslPass for Sun {
         self.square.init(gl_fns.clone(), mat3d);
     }
 
-    fn update(&mut self, mat3d: crate::helpers::Mat3DUpdate, light_pos: Option<glam::Vec3>) {
+    fn update(
+        &mut self,
+        mat3d: crate::helpers::Mat3DUpdate,
+        light_pos: Option<glam::Vec3>,
+
+        eye_pos: Option<glam::Vec3>,
+    ) {
         let elapsed_s_f32 = self.init.elapsed().as_secs_f32();
         let next_spin_stop = f32::ceil(elapsed_s_f32 / ORBIT_T_S) * ORBIT_T_S;
         let perc_of_rotation = (next_spin_stop - elapsed_s_f32) / ORBIT_T_S;
@@ -74,7 +80,7 @@ impl GlslPass for Sun {
         };
 
         self.square
-            .update(Mat3DUpdate { model, ..mat3d }, light_pos);
+            .update(Mat3DUpdate { model, ..mat3d }, light_pos, eye_pos);
     }
 
     unsafe fn draw(&self) {

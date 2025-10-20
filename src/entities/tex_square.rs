@@ -212,7 +212,13 @@ impl GlslPass for TexSquare {
         })
     }
 
-    fn update(&mut self, mat3d: Mat3DUpdate, _light_pos: Option<glam::Vec3>) {
+    fn update(
+        &mut self,
+        mat3d: Mat3DUpdate,
+        _light_pos: Option<glam::Vec3>,
+
+        _eye_pos: Option<glam::Vec3>,
+    ) {
         if let Some(shader) = &mut self.shader {
             if let Some(model_updated) = mat3d.model {
                 shader.model_transform = model_updated;

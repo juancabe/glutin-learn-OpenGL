@@ -178,7 +178,12 @@ impl GlslPass for HelloTriangle {
         })
     }
 
-    fn update(&mut self, mut mat3d: Mat3DUpdate, _light_pos: Option<glam::Vec3>) {
+    fn update(
+        &mut self,
+        mut mat3d: Mat3DUpdate,
+        _light_pos: Option<glam::Vec3>,
+        _eye_pos: Option<glam::Vec3>,
+    ) {
         let elapsed = self.init.elapsed();
         if elapsed.as_secs() > self.last_second {
             self.last_second = elapsed.as_secs();

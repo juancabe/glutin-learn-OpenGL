@@ -369,8 +369,8 @@ impl ApplicationHandler for App {
             };
 
             renderer.clear();
-            renderer.draw(renderer_refs, mat3d, Some(sun.get_pos()));
-            renderer.draw([sun as &mut dyn GlslPass].into_iter(), mat3d, None);
+            renderer.draw(renderer_refs, mat3d, Some(sun.get_pos()), Some(camera.pos));
+            renderer.draw([sun as &mut dyn GlslPass].into_iter(), mat3d, None, None);
 
             window.request_redraw();
 

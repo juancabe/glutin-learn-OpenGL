@@ -191,7 +191,12 @@ impl GlslPass for UtahTeapot {
         })
     }
 
-    fn update(&mut self, mat3d: crate::helpers::Mat3DUpdate, light_pos: Option<Vec3>) {
+    fn update(
+        &mut self,
+        mat3d: crate::helpers::Mat3DUpdate,
+        light_pos: Option<Vec3>,
+        eye_pos: Option<Vec3>,
+    ) {
         if let Some(shader) = &self.shader {
             unsafe {
                 mat3d.set_uniforms(&shader.gl_fns, shader.program);
@@ -205,6 +210,17 @@ impl GlslPass for UtahTeapot {
                     shader
                         .gl_fns
                         .Uniform3f(light_pos_loc, light_pos.x, light_pos.y, light_pos.z);
+                }
+            }
+
+            if let Some(eye_pos) = eye_pos {
+                unsafe {
+                    let eye_pos_loc = shader
+                        .gl_fns
+                        .GetUniformLocation(shader.program, c"uEyePos".as_ptr() as *const _);
+                    shader
+                        .gl_fns
+                        .Uniform3f(eye_pos_loc, eye_pos.x, eye_pos.y, eye_pos.z);
                 }
             }
         }
@@ -232,12 +248,9 @@ out vec3 fragPos;
 
 void main() {
     gl_Position = projection * view * model * vec4(position, 1.0);
-    fragNorm = normal;
     fragPos = vec3(model * vec4(position, 1.0));
     // Use the upper 3x3 of the model matrix for rotation/scaling
     fragNorm = mat3(transpose(inverse(model))) * normal;  
-
-
 }
 \0";
 
@@ -246,6 +259,7 @@ const FRAGMENT_SHADER_SOURCE: &[u8] = b"
 
 uniform vec3 uColor;
 uniform vec3 uLightPos;
+uniform vec3 viewPos;
 
 layout(location = 0) out vec4 FragColor;
 
@@ -253,12 +267,21 @@ in vec3 fragNorm;
 in vec3 fragPos;
 
 void main() {
+    float specularStrength = 0.5;
+
     vec3 norm = normalize(fragNorm);
+
     vec3 lightDir = normalize(uLightPos - fragPos);
     float diffuse = max(dot(norm, lightDir), 0.0);
 
+    vec3 viewDir = normalize(viewPos - fragPos);
+    vec3 reflectDir = reflect(-lightDir, norm);
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+    vec3 specular = specularStrength * spec * vec3(1.0, 1.0, 1.0);
+
     float ambientStrenght = 0.1;
-    vec3 result = uColor * (ambientStrenght + diffuse);
+
+    vec3 result = uColor * (ambientStrenght + diffuse + specular);
     FragColor = vec4(result, 1.0);
 }
 \0";

@@ -92,7 +92,12 @@ pub trait GlslPass {
     fn init(&mut self, gl_fns: Rc<Gles2>, mat3d: Mat3DUpdate);
 
     // Per-frame updates (uniforms, buffers, animations). Caller ensures active shader
-    fn update(&mut self, mat3d: Mat3DUpdate, light_pos: Option<glam::Vec3>);
+    fn update(
+        &mut self,
+        mat3d: Mat3DUpdate,
+        light_pos: Option<glam::Vec3>,
+        eye_pos: Option<glam::Vec3>,
+    );
 
     /// Issue draw calls. Caller ensures active shader
     /// # Safety
@@ -139,13 +144,18 @@ pub trait GlslPass {
     // gl FFI getter
     fn get_shader(&self) -> Option<&Shader>;
 
-    fn update_draw(&mut self, mat3d: Mat3DUpdate, light_pos: Option<glam::Vec3>) {
+    fn update_draw(
+        &mut self,
+        mat3d: Mat3DUpdate,
+        light_pos: Option<glam::Vec3>,
+        eye_pos: Option<glam::Vec3>,
+    ) {
         let Some(shader) = self.get_shader() else {
             log::warn!("Called update_draw on unitialized GlslPass");
             return;
         };
         unsafe { shader.use_program() }
-        self.update(mat3d, light_pos);
+        self.update(mat3d, light_pos, eye_pos);
         unsafe { self.draw() };
     }
 }

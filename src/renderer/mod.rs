@@ -43,12 +43,17 @@ impl Renderer {
         }
     }
 
-    pub fn draw<'a, I>(&mut self, objects: I, mat3d: Mat3DUpdate, light_pos: Option<glam::Vec3>)
-    where
+    pub fn draw<'a, I>(
+        &mut self,
+        objects: I,
+        mat3d: Mat3DUpdate,
+        light_pos: Option<glam::Vec3>,
+        eye_pos: Option<glam::Vec3>,
+    ) where
         I: Iterator<Item = &'a mut dyn GlslPass>,
     {
         for obj in objects {
-            obj.update_draw(mat3d, light_pos);
+            obj.update_draw(mat3d, light_pos, eye_pos);
         }
     }
 
