@@ -166,7 +166,7 @@ impl GlslPass for UtahTeapot {
         }
 
         mat3d.model = Some(
-            glam::Mat4::from_scale(glam::Vec3::splat(0.5))
+            glam::Mat4::from_scale(glam::Vec3::splat(0.3))
                 * glam::Mat4::from_translation(self.position),
         );
 
@@ -259,7 +259,7 @@ const FRAGMENT_SHADER_SOURCE: &[u8] = b"
 
 uniform vec3 uColor;
 uniform vec3 uLightPos;
-uniform vec3 viewPos;
+uniform vec3 uEyePos;
 
 layout(location = 0) out vec4 FragColor;
 
@@ -274,7 +274,7 @@ void main() {
     vec3 lightDir = normalize(uLightPos - fragPos);
     float diffuse = max(dot(norm, lightDir), 0.0);
 
-    vec3 viewDir = normalize(viewPos - fragPos);
+    vec3 viewDir = normalize(uEyePos - fragPos);
     vec3 reflectDir = reflect(-lightDir, norm);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
     vec3 specular = specularStrength * spec * vec3(1.0, 1.0, 1.0);

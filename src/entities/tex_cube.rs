@@ -14,13 +14,13 @@ fn build_faces(pos: &GlPosition, side_len: f32) -> [Square; 6] {
     [
         // Front face
         Square {
-            bottom_left: GlPosition::new(pos.x - half_side, pos.y - half_side, pos.z + half_side),
-            top_right: GlPosition::new(pos.x + half_side, pos.y + half_side, pos.z + half_side),
+            bottom_left: GlPosition::new(pos.x + half_side, pos.y + half_side, pos.z + half_side),
+            top_right: GlPosition::new(pos.x - half_side, pos.y - half_side, pos.z + half_side),
         },
         // Back face
         Square {
-            bottom_left: GlPosition::new(pos.x - half_side, pos.y - half_side, pos.z - half_side),
-            top_right: GlPosition::new(pos.x + half_side, pos.y + half_side, pos.z - half_side),
+            bottom_left: GlPosition::new(pos.x + half_side, pos.y - half_side, pos.z - half_side),
+            top_right: GlPosition::new(pos.x - half_side, pos.y + half_side, pos.z - half_side),
         },
         // Right face
         Square {
@@ -34,8 +34,8 @@ fn build_faces(pos: &GlPosition, side_len: f32) -> [Square; 6] {
         },
         // Top face
         Square {
-            bottom_left: GlPosition::new(pos.x - half_side, pos.y + half_side, pos.z - half_side),
-            top_right: GlPosition::new(pos.x + half_side, pos.y + half_side, pos.z + half_side),
+            bottom_left: GlPosition::new(pos.x - half_side, pos.y + half_side, pos.z + half_side),
+            top_right: GlPosition::new(pos.x + half_side, pos.y + half_side, pos.z - half_side),
         },
         // Bottom face
         Square {

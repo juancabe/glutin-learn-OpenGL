@@ -183,6 +183,8 @@ impl ApplicationHandler for App {
         }
         let tp = FLOOR_SIDE as f32 / 2.0 * CS;
 
+        let utah_sep = CS * 6.0;
+
         let mut entities: Vec<Box<dyn Entity>> = vec![
             Box::new(HelloTriangle::new((GlPosition::new(tp, CS * 2.0, tp), CS))),
             Box::new(TexCube::new(
@@ -192,8 +194,16 @@ impl ApplicationHandler for App {
                 Some("./assets/dirt.webp".into()),
             )),
             Box::new(UtahTeapot::new(
-                GlPosition::new(tp, CS, tp),
+                GlPosition::new(tp - utah_sep, CS, tp - utah_sep),
                 Vec3::new(1.0, 0.2, 0.2),
+            )),
+            Box::new(UtahTeapot::new(
+                GlPosition::new(tp, CS, tp),
+                Vec3::new(0.3, 0.2, 0.9),
+            )),
+            Box::new(UtahTeapot::new(
+                GlPosition::new(tp + utah_sep, CS, tp + utah_sep),
+                Vec3::new(0.1, 0.9, 0.2),
             )),
         ];
 
