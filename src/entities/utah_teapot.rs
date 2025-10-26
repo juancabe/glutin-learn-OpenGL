@@ -166,8 +166,7 @@ impl GlslPass for UtahTeapot {
         }
 
         mat3d.model = Some(
-            glam::Mat4::from_scale(glam::Vec3::splat(0.3))
-                * glam::Mat4::from_translation(self.position),
+            glam::Mat4::from_translation(self.position), // * glam::Mat4::from_scale(glam::Vec3::splat(0.3)),
         );
 
         unsafe {

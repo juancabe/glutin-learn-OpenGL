@@ -36,6 +36,7 @@ use crate::entities::utah_teapot::UtahTeapot;
 use crate::gl::{self};
 use crate::helpers::{FpsCounter, GlPosition, Mat3DUpdate};
 use crate::renderer::shader::GlslPass;
+use crate::terrain_builder;
 use crate::{GlDisplayCreationState, renderer::Renderer, window_attributes};
 use glutin::surface::{Surface, SwapInterval, WindowSurface};
 
@@ -170,44 +171,57 @@ impl ApplicationHandler for App {
             log::error!("Error setting vsync: {res:?}");
         }
 
-        const FLOOR_SIDE: usize = 10;
-        const CS: f32 = 0.5;
-        let mut cubes_floor = vec![];
+        const FLOOR_SIDE: usize = 100;
+        const HEIGHT: usize = 4;
+        const CS: f32 = 1.0;
 
-        for i in 0..FLOOR_SIDE {
-            cubes_floor.push(GlPosition::new(i as f32 * CS, 0.0, i as f32 * CS));
-            for j in 0..(FLOOR_SIDE - i) {
-                cubes_floor.push(GlPosition::new((i + j) as f32 * CS, 0.0, i as f32 * CS));
-                cubes_floor.push(GlPosition::new(i as f32 * CS, 0.0, (i + j) as f32 * CS));
+        let tb = terrain_builder::terrain_builder(123, HEIGHT);
+
+        let mut cubes_floor = vec![];
+        for x in 0..FLOOR_SIDE {
+            for z in 0..FLOOR_SIDE {
+                for y in 0..=tb(x, z) {
+                    cubes_floor.push(Vec3::new(x as f32, y as f32, z as f32))
+                }
             }
         }
-        let tp = FLOOR_SIDE as f32 / 2.0 * CS;
 
-        let utah_sep = CS * 6.0;
+        let utahs: Vec<Box<UtahTeapot>> = [
+            glam::Vec2::new(10.0, 15.0),
+            glam::Vec2::new(5.0, 2.0),
+            glam::Vec2::new(20.0, 12.0),
+        ]
+        .iter()
+        .map(|utah| {
+            Box::new(UtahTeapot::new(
+                GlPosition::new(
+                    utah.x,
+                    tb(utah.x as usize, utah.y as usize) as f32 + 0.5,
+                    utah.y,
+                ),
+                Vec3::new(1.0, 0.0, 0.0),
+            ))
+        })
+        .collect();
 
         let mut entities: Vec<Box<dyn Entity>> = vec![
-            Box::new(HelloTriangle::new((GlPosition::new(tp, CS * 2.0, tp), CS))),
+            Box::new(HelloTriangle::new((
+                GlPosition::new(3.0, HEIGHT as f32 + 1.0, 3.0),
+                CS,
+            ))),
             Box::new(TexCube::new(
                 cubes_floor,
-                0.5,
+                CS,
                 // Dirt cubes floor
                 Some("./assets/dirt.webp".into()),
             )),
-            Box::new(UtahTeapot::new(
-                GlPosition::new(tp - utah_sep, CS, tp - utah_sep),
-                Vec3::new(1.0, 0.2, 0.2),
-            )),
-            Box::new(UtahTeapot::new(
-                GlPosition::new(tp, CS, tp),
-                Vec3::new(0.3, 0.2, 0.9),
-            )),
-            Box::new(UtahTeapot::new(
-                GlPosition::new(tp + utah_sep, CS, tp + utah_sep),
-                Vec3::new(0.1, 0.9, 0.2),
-            )),
         ];
 
-        let mut sun = Sun::new(GlPosition::new(tp, 10.0, tp));
+        for utah in utahs {
+            entities.push(utah);
+        }
+
+        let mut sun = Sun::new(GlPosition::new(3.0, 10.0, 3.0));
 
         let dimensions = self
             .renderer

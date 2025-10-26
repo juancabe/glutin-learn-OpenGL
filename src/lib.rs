@@ -5,6 +5,7 @@ pub mod camera;
 pub mod entities;
 pub mod helpers;
 pub mod renderer;
+pub mod terrain_builder;
 
 use glutin::config::ConfigTemplateBuilder;
 use glutin_winit::DisplayBuilder;

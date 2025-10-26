@@ -364,6 +364,7 @@ uniform sampler2D tex;
 
 
 void main() {
+    float fogDistance = 10;
     float specularStrength = 0.5;
 
     vec3 norm = normalize(fragNorm);
@@ -380,6 +381,6 @@ void main() {
 
     vec4 lightModel = vec4(vec3(ambientStrenght + diffuse + specular), 1);
 
-    FragColor = lightModel * texture(tex, TexCoord);
+    FragColor = lightModel * texture(tex, TexCoord) - vec4(0, 0, 0, 1) * (length(uEyePos - fragPos) / fogDistance);
 }
 \0";
