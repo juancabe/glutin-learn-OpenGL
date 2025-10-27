@@ -59,7 +59,7 @@ impl Square {
             self.bottom_left.z.max(self.top_right.z),
         );
 
-        if (self.bottom_left.x == self.top_right.x) {
+        if self.bottom_left.x == self.top_right.x {
             // x = const
             [
                 GlPosition::new(minx, miny, minz),
@@ -67,7 +67,7 @@ impl Square {
                 GlPosition::new(minx, miny, maxz),
                 GlPosition::new(minx, maxy, maxz),
             ]
-        } else if (self.bottom_left.y == self.top_right.y) {
+        } else if self.bottom_left.y == self.top_right.y {
             // y = const
             [
                 GlPosition::new(minx, miny, minz),
@@ -87,12 +87,12 @@ impl Square {
     }
 
     pub fn as_vertex_data(&self) -> [SquareVertex; 4] {
-        let [mut bl, mut tl, mut br, mut tr] = self.as_vertex_stride();
+        let [bl, mut tl, mut br, tr] = self.as_vertex_stride();
 
         // Decide if we must flip winding so the normal points outward
         let x_const = self.bottom_left.x == self.top_right.x;
         let y_const = self.bottom_left.y == self.top_right.y;
-        let z_const = self.bottom_left.z == self.top_right.z;
+        // let z_const = self.bottom_left.z == self.top_right.z;
 
         // Rules derived from how build_faces sets bottom_left/top_right
         let flip_winding = if x_const {
@@ -360,12 +360,16 @@ uniform vec3 uEyePos;
 in vec2 TexCoord;
 in vec3 fragNorm;
 in vec3 fragPos;
+
 uniform sampler2D tex;
 
-
 void main() {
-    float fogDistance = 10;
+    float ambientStrenght = 0.1;
     float specularStrength = 0.5;
+
+    float fogNear = 1.0;
+    float fogFar = 100.0;
+    vec3 fogColor = vec3(0.1, 0.1, 0.1);
 
     vec3 norm = normalize(fragNorm);
 
@@ -377,10 +381,20 @@ void main() {
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
     float specular = specularStrength * spec;
 
-    float ambientStrenght = 0.1;
 
-    vec4 lightModel = vec4(vec3(ambientStrenght + diffuse + specular), 1);
+    vec4 albedo = texture(tex, TexCoord);
 
-    FragColor = lightModel * texture(tex, TexCoord) - vec4(0, 0, 0, 1) * (length(uEyePos - fragPos) / fogDistance);
+    vec3 sceneColor = albedo.rgb * (ambientStrenght + diffuse + specular);
+    // float alpha = albedo.a;
+
+    // vec4 lightModel = vec4(vec3(ambientStrenght + diffuse + specular), 1);
+
+    float d = length(uEyePos - fragPos);
+    float f = clamp((fogFar - d) / (fogFar - fogNear), 0.0, 1.0);
+
+    vec3 finalRgb = mix(fogColor, sceneColor, f);
+
+    // FragColor = lightModel * texture(tex, TexCoord) - vec4(0.1, 0.1, 0.1, 0.0) * (length(uEyePos - fragPos) / fogDistance) + vec4(0.0, 0.0, 0.0, 1.0);
+    FragColor = vec4(finalRgb, 1.0);
 }
 \0";
