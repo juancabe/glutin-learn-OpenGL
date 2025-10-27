@@ -7,7 +7,9 @@ use crate::{
     entities::Entity,
     gl,
     helpers::GlPosition,
-    renderer::shader::{Drawable, GlslPass, IndexedElements, Shader, create_shader},
+    renderer::shader::{
+        Drawable, GlslPass, IndexedElements, Shader, create_shader, uniform::Uniform,
+    },
 };
 
 #[derive(Clone)]
@@ -35,7 +37,12 @@ struct Vertex {
 }
 
 impl GlslPass for UtahTeapot {
-    fn init(&mut self, gl_fns: Rc<crate::gl::Gles2>, mut mat3d: crate::helpers::Mat3DUpdate) {
+    fn init(
+        &mut self,
+        gl_fns: Rc<crate::gl::Gles2>,
+        mut mat3d: crate::helpers::Mat3DUpdate,
+        init_uniforms: &[Box<dyn Uniform>],
+    ) {
         let lo = LoadOptions {
             triangulate: true,
             ..Default::default()
@@ -155,6 +162,10 @@ impl GlslPass for UtahTeapot {
 
                 gl_fns.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
                 gl_fns.EnableVertexAttribArray(norm_attrib as gl::types::GLuint);
+
+                for unifom in init_uniforms {
+                    unifom.set(&gl_fns, program);
+                }
             }
 
             drawables.push(Drawable::Indexed(IndexedElements {
@@ -190,37 +201,14 @@ impl GlslPass for UtahTeapot {
         })
     }
 
-    fn update(
-        &mut self,
-        mat3d: crate::helpers::Mat3DUpdate,
-        light_pos: Option<Vec3>,
-        eye_pos: Option<Vec3>,
-    ) {
+    fn update(&mut self, mat3d: crate::helpers::Mat3DUpdate, to_set_uniforms: &[Box<dyn Uniform>]) {
         if let Some(shader) = &self.shader {
             unsafe {
                 mat3d.set_uniforms(&shader.gl_fns, shader.program);
             }
-            // Light position uniform
-            if let Some(light_pos) = light_pos {
-                unsafe {
-                    let light_pos_loc = shader
-                        .gl_fns
-                        .GetUniformLocation(shader.program, c"uLightPos".as_ptr() as *const _);
-                    shader
-                        .gl_fns
-                        .Uniform3f(light_pos_loc, light_pos.x, light_pos.y, light_pos.z);
-                }
-            }
 
-            if let Some(eye_pos) = eye_pos {
-                unsafe {
-                    let eye_pos_loc = shader
-                        .gl_fns
-                        .GetUniformLocation(shader.program, c"uEyePos".as_ptr() as *const _);
-                    shader
-                        .gl_fns
-                        .Uniform3f(eye_pos_loc, eye_pos.x, eye_pos.y, eye_pos.z);
-                }
+            for uniform in to_set_uniforms {
+                uniform.set(&shader.gl_fns, shader.program);
             }
         }
     }
@@ -257,8 +245,16 @@ const FRAGMENT_SHADER_SOURCE: &[u8] = b"
 #version 410 core
 
 uniform vec3 uColor;
+
 uniform vec3 uLightPos;
 uniform vec3 uEyePos;
+
+uniform float uFogNear;
+uniform float uFogFar;
+uniform vec3 uFogColor;
+
+uniform float uAmbientStrenght;
+uniform float uSpecularStrength;
 
 layout(location = 0) out vec4 FragColor;
 
@@ -266,8 +262,6 @@ in vec3 fragNorm;
 in vec3 fragPos;
 
 void main() {
-    float specularStrength = 0.5;
-
     vec3 norm = normalize(fragNorm);
 
     vec3 lightDir = normalize(uLightPos - fragPos);
@@ -276,11 +270,17 @@ void main() {
     vec3 viewDir = normalize(uEyePos - fragPos);
     vec3 reflectDir = reflect(-lightDir, norm);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-    vec3 specular = specularStrength * spec * vec3(1.0, 1.0, 1.0);
+    vec3 specular = uSpecularStrength * spec * vec3(1.0, 1.0, 1.0);
 
-    float ambientStrenght = 0.1;
+    vec4 albedo = vec4(uColor, 1.0);
+    vec3 sceneColor = albedo.rgb * (uAmbientStrenght + diffuse + specular);
 
-    vec3 result = uColor * (ambientStrenght + diffuse + specular);
-    FragColor = vec4(result, 1.0);
+    float d = length(uEyePos - fragPos);
+    float f = clamp((uFogFar - d) / (uFogFar - uFogNear), 0.0, 1.0);
+
+    vec3 finalRgb = mix(uFogColor, sceneColor, f);
+
+    FragColor = vec4(finalRgb, 1.0);
+
 }
 \0";

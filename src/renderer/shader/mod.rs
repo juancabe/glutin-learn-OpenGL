@@ -1,8 +1,11 @@
 use crate::{
     gl::{self, Gles2},
     helpers::Mat3DUpdate,
+    renderer::shader::uniform::Uniform,
 };
 use std::{ffi::CStr, rc::Rc};
+
+pub mod uniform;
 
 #[derive(Clone, Debug, Default)]
 pub struct IndexedElements {
@@ -89,15 +92,15 @@ impl Drop for Shader {
 
 pub trait GlslPass {
     // Create GPU resources; should be idempotent or guarded by internal state.
-    fn init(&mut self, gl_fns: Rc<Gles2>, mat3d: Mat3DUpdate);
+    fn init(
+        &mut self,
+        gl_fns: Rc<Gles2>,
+        mat3d: Mat3DUpdate,
+        initial_uniforms: &[Box<dyn Uniform>],
+    );
 
     // Per-frame updates (uniforms, buffers, animations). Caller ensures active shader
-    fn update(
-        &mut self,
-        mat3d: Mat3DUpdate,
-        light_pos: Option<glam::Vec3>,
-        eye_pos: Option<glam::Vec3>,
-    );
+    fn update(&mut self, mat3d: Mat3DUpdate, to_set_uniforms: &[Box<dyn Uniform>]);
 
     /// Issue draw calls. Caller ensures active shader
     /// # Safety
@@ -144,18 +147,13 @@ pub trait GlslPass {
     // gl FFI getter
     fn get_shader(&self) -> Option<&Shader>;
 
-    fn update_draw(
-        &mut self,
-        mat3d: Mat3DUpdate,
-        light_pos: Option<glam::Vec3>,
-        eye_pos: Option<glam::Vec3>,
-    ) {
+    fn update_draw(&mut self, mat3d: Mat3DUpdate, to_set_uniforms: &[Box<dyn Uniform>]) {
         let Some(shader) = self.get_shader() else {
             log::warn!("Called update_draw on unitialized GlslPass");
             return;
         };
         unsafe { shader.use_program() }
-        self.update(mat3d, light_pos, eye_pos);
+        self.update(mat3d, to_set_uniforms);
         unsafe { self.draw() };
     }
 }

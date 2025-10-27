@@ -4,7 +4,7 @@ use crate::{
     entities::Entity,
     gl::{self, Gles2},
     helpers::{GlColor, GlPosition, Mat3DUpdate},
-    renderer::shader::{Array, Drawable, GlslPass, Shader, create_shader},
+    renderer::shader::{Array, Drawable, GlslPass, Shader, create_shader, uniform::Uniform},
 };
 
 #[derive(Clone)]
@@ -85,7 +85,7 @@ impl HelloTriangle {
 }
 
 impl GlslPass for HelloTriangle {
-    fn init(&mut self, gl_fns: Rc<Gles2>, mat3d: Mat3DUpdate) {
+    fn init(&mut self, gl_fns: Rc<Gles2>, mat3d: Mat3DUpdate, init_uniforms: &[Box<dyn Uniform>]) {
         let program;
         let mut vao;
         let mut vbo;
@@ -155,6 +155,10 @@ impl GlslPass for HelloTriangle {
 
             gl_fns.EnableVertexAttribArray(pos_attrib as gl::types::GLuint);
             gl_fns.EnableVertexAttribArray(color_attrib as gl::types::GLuint);
+
+            for uniform in init_uniforms {
+                uniform.set(&gl_fns, program);
+            }
         }
 
         let drawable = Drawable::Array(Array {
@@ -178,12 +182,7 @@ impl GlslPass for HelloTriangle {
         })
     }
 
-    fn update(
-        &mut self,
-        mut mat3d: Mat3DUpdate,
-        _light_pos: Option<glam::Vec3>,
-        _eye_pos: Option<glam::Vec3>,
-    ) {
+    fn update(&mut self, mut mat3d: Mat3DUpdate, to_set_uniforms: &[Box<dyn Uniform>]) {
         let elapsed = self.init.elapsed();
         if elapsed.as_secs() > self.last_second {
             self.last_second = elapsed.as_secs();
@@ -206,6 +205,10 @@ impl GlslPass for HelloTriangle {
                 mat3d.model = Some(shader.model_transform);
             }
             unsafe { mat3d.set_uniforms(&shader.gl_fns, shader.program) };
+
+            for uniform in to_set_uniforms {
+                uniform.set(&shader.gl_fns, shader.program);
+            }
         }
     }
 

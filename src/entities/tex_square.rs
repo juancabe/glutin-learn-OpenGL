@@ -4,7 +4,7 @@ use crate::{
     entities::Entity,
     gl,
     helpers::{GlPosition, Mat3DUpdate},
-    renderer::shader::{Array, Drawable, GlslPass, Shader, Tex, create_shader},
+    renderer::shader::{Array, Drawable, GlslPass, Shader, Tex, create_shader, uniform::Uniform},
 };
 
 pub struct SquareVertex {
@@ -140,7 +140,12 @@ impl TexSquare {
 }
 
 impl GlslPass for TexSquare {
-    fn init(&mut self, gl_fns: Rc<crate::gl::Gles2>, mat3d: Mat3DUpdate) {
+    fn init(
+        &mut self,
+        gl_fns: Rc<crate::gl::Gles2>,
+        mat3d: Mat3DUpdate,
+        init_uniforms: &[Box<dyn Uniform>],
+    ) {
         let image = self.texture.as_ref().map(|path| {
             image::ImageReader::open(path)
                 .unwrap_or_else(|_| panic!("{path:?} should be readable"))
@@ -254,6 +259,10 @@ impl GlslPass for TexSquare {
                 tex_id
             });
             // --
+
+            for uniform in init_uniforms {
+                uniform.set(&gl_fns, program);
+            }
         }
 
         let tex = tex.map(|tex| Tex {
@@ -282,38 +291,15 @@ impl GlslPass for TexSquare {
         })
     }
 
-    fn update(
-        &mut self,
-        mat3d: Mat3DUpdate,
-        light_pos: Option<glam::Vec3>,
-        eye_pos: Option<glam::Vec3>,
-    ) {
+    fn update(&mut self, mat3d: Mat3DUpdate, to_set_uniforms: &[Box<dyn Uniform>]) {
         if let Some(shader) = &mut self.shader {
             if let Some(model_updated) = mat3d.model {
                 shader.model_transform = model_updated;
             }
             unsafe { mat3d.set_uniforms(&shader.gl_fns, shader.program) };
-            // Light position uniform
-            if let Some(light_pos) = light_pos {
-                unsafe {
-                    let light_pos_loc = shader
-                        .gl_fns
-                        .GetUniformLocation(shader.program, c"uLightPos".as_ptr() as *const _);
-                    shader
-                        .gl_fns
-                        .Uniform3f(light_pos_loc, light_pos.x, light_pos.y, light_pos.z);
-                }
-            }
 
-            if let Some(eye_pos) = eye_pos {
-                unsafe {
-                    let eye_pos_loc = shader
-                        .gl_fns
-                        .GetUniformLocation(shader.program, c"uEyePos".as_ptr() as *const _);
-                    shader
-                        .gl_fns
-                        .Uniform3f(eye_pos_loc, eye_pos.x, eye_pos.y, eye_pos.z);
-                }
+            for uniform in to_set_uniforms {
+                uniform.set(&shader.gl_fns, shader.program);
             }
         }
     }
@@ -357,6 +343,13 @@ layout(location = 0) out vec4 FragColor;
 uniform vec3 uLightPos;
 uniform vec3 uEyePos;
 
+uniform float uFogNear;
+uniform float uFogFar;
+uniform vec3 uFogColor;
+
+uniform float uAmbientStrenght;
+uniform float uSpecularStrength;
+
 in vec2 TexCoord;
 in vec3 fragNorm;
 in vec3 fragPos;
@@ -364,13 +357,6 @@ in vec3 fragPos;
 uniform sampler2D tex;
 
 void main() {
-    float ambientStrenght = 0.1;
-    float specularStrength = 0.5;
-
-    float fogNear = 1.0;
-    float fogFar = 100.0;
-    vec3 fogColor = vec3(0.1, 0.1, 0.1);
-
     vec3 norm = normalize(fragNorm);
 
     vec3 lightDir = normalize(uLightPos - fragPos);
@@ -379,22 +365,16 @@ void main() {
     vec3 viewDir = normalize(uEyePos - fragPos);
     vec3 reflectDir = reflect(-lightDir, norm);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-    float specular = specularStrength * spec;
-
+    float specular = uSpecularStrength * spec;
 
     vec4 albedo = texture(tex, TexCoord);
-
-    vec3 sceneColor = albedo.rgb * (ambientStrenght + diffuse + specular);
-    // float alpha = albedo.a;
-
-    // vec4 lightModel = vec4(vec3(ambientStrenght + diffuse + specular), 1);
-
+    vec3 sceneColor = albedo.rgb * (uAmbientStrenght + diffuse + specular);
+    
     float d = length(uEyePos - fragPos);
-    float f = clamp((fogFar - d) / (fogFar - fogNear), 0.0, 1.0);
+    float f = clamp((uFogFar - d) / (uFogFar - uFogNear), 0.0, 1.0);
 
-    vec3 finalRgb = mix(fogColor, sceneColor, f);
+    vec3 finalRgb = mix(uFogColor, sceneColor, f);
 
-    // FragColor = lightModel * texture(tex, TexCoord) - vec4(0.1, 0.1, 0.1, 0.0) * (length(uEyePos - fragPos) / fogDistance) + vec4(0.0, 0.0, 0.0, 1.0);
     FragColor = vec4(finalRgb, 1.0);
 }
 \0";

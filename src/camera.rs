@@ -3,6 +3,8 @@ use std::time::Duration;
 use glam::Vec3;
 use winit::keyboard::KeyCode;
 
+use crate::helpers::GlPosition;
+
 const VEL: f32 = 0.01;
 const SENS: f32 = 0.1;
 
@@ -106,6 +108,13 @@ pub struct Camera {
 }
 
 impl Camera {
+    pub fn from_pos(pos: GlPosition) -> Self {
+        Self {
+            pos,
+            ..Default::default()
+        }
+    }
+
     pub fn as_view(&self) -> glam::Mat4 {
         glam::Mat4::look_at_rh(self.pos, self.pos + self.front(), self.up)
     }

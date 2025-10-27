@@ -5,7 +5,7 @@ use glam::USizeVec2;
 use crate::{
     gl::{self, Gles2},
     helpers::Mat3DUpdate,
-    renderer::shader::GlslPass,
+    renderer::shader::{GlslPass, uniform::Uniform},
 };
 
 pub mod shader;
@@ -13,10 +13,15 @@ pub mod shader;
 pub struct Renderer {
     window_dimensions: glam::USizeVec2,
     gl: Rc<gl::Gl>,
+    clear_color: glam::Vec3,
 }
 
 impl Renderer {
-    pub fn new(gl_fns: Rc<Gles2>, window_dimensions: glam::USizeVec2) -> Self {
+    pub fn new(
+        gl_fns: Rc<Gles2>,
+        window_dimensions: glam::USizeVec2,
+        clear_color: glam::Vec3,
+    ) -> Self {
         if let Some(renderer) = get_gl_string(&gl_fns, gl::RENDERER) {
             log::info!("Running on {}", renderer.to_string_lossy());
         }
@@ -33,12 +38,18 @@ impl Renderer {
         Self {
             window_dimensions,
             gl: gl_fns,
+            clear_color,
         }
     }
 
     pub fn clear(&self) {
         unsafe {
-            self.gl.ClearColor(0.1, 0.1, 0.1, 1.0);
+            self.gl.ClearColor(
+                self.clear_color.x,
+                self.clear_color.y,
+                self.clear_color.z,
+                1.0,
+            );
             self.gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
     }
@@ -47,13 +58,12 @@ impl Renderer {
         &mut self,
         objects: I,
         mat3d: Mat3DUpdate,
-        light_pos: Option<glam::Vec3>,
-        eye_pos: Option<glam::Vec3>,
+        to_set_uniforms: &[Box<dyn Uniform>],
     ) where
         I: Iterator<Item = &'a mut dyn GlslPass>,
     {
         for obj in objects {
-            obj.update_draw(mat3d, light_pos, eye_pos);
+            obj.update_draw(mat3d, to_set_uniforms);
         }
     }
 

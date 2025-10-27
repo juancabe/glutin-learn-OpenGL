@@ -6,7 +6,7 @@ use crate::{
         tex_square::{Square, TexSquare},
     },
     helpers::GlPosition,
-    renderer::shader::{GlslPass, Shader},
+    renderer::shader::{GlslPass, Shader, uniform::Uniform},
 };
 
 fn build_faces(pos: &GlPosition, side_len: f32) -> [Square; 6] {
@@ -64,17 +64,17 @@ impl TexCube {
 }
 
 impl GlslPass for TexCube {
-    fn init(&mut self, gl_fns: Rc<crate::gl::Gles2>, mat3d: crate::helpers::Mat3DUpdate) {
-        self.squares.init(gl_fns.clone(), mat3d);
+    fn init(
+        &mut self,
+        gl_fns: Rc<crate::gl::Gles2>,
+        mat3d: crate::helpers::Mat3DUpdate,
+        init_uniforms: &[Box<dyn Uniform>],
+    ) {
+        self.squares.init(gl_fns.clone(), mat3d, init_uniforms);
     }
 
-    fn update(
-        &mut self,
-        mat3d: crate::helpers::Mat3DUpdate,
-        light_pos: Option<glam::Vec3>,
-        eye_pos: Option<glam::Vec3>,
-    ) {
-        self.squares.update(mat3d, light_pos, eye_pos);
+    fn update(&mut self, mat3d: crate::helpers::Mat3DUpdate, to_set_uniforms: &[Box<dyn Uniform>]) {
+        self.squares.update(mat3d, to_set_uniforms);
     }
 
     unsafe fn draw(&self) {

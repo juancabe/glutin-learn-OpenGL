@@ -36,12 +36,19 @@ use crate::entities::utah_teapot::UtahTeapot;
 use crate::gl::{self};
 use crate::helpers::{FpsCounter, GlPosition, Mat3DUpdate};
 use crate::renderer::shader::GlslPass;
+use crate::renderer::shader::uniform::{EyePos, Fog, LightPos, Lighting, Uniform};
 use crate::terrain_builder;
 use crate::{GlDisplayCreationState, renderer::Renderer, window_attributes};
 use glutin::surface::{Surface, SwapInterval, WindowSurface};
 
 const DEFAULT_WINDOW_WIDTH: usize = 800;
 const DEFAULT_WINDOW_HEIGHT: usize = 600;
+
+const CLEAR_COLOR: glam::Vec3 = glam::Vec3 {
+    x: 0.1,
+    y: 0.1,
+    z: 0.1,
+};
 
 struct AppState {
     gl_surface: Surface<WindowSurface>,
@@ -161,6 +168,7 @@ impl ApplicationHandler for App {
             Renderer::new(
                 gl_fns.clone(),
                 glam::USizeVec2::new(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT),
+                CLEAR_COLOR,
             )
         });
 
@@ -186,10 +194,12 @@ impl ApplicationHandler for App {
             }
         }
 
+        const MIDDLE: f32 = FLOOR_SIDE as f32 * CS / 2.0;
+
         let utahs: Vec<Box<UtahTeapot>> = [
-            glam::Vec2::new(10.0, 15.0),
-            glam::Vec2::new(5.0, 2.0),
-            glam::Vec2::new(20.0, 12.0),
+            glam::Vec2::new(10.0 + MIDDLE, 15.0 + MIDDLE),
+            glam::Vec2::new(MIDDLE - 5.0, MIDDLE + 2.0),
+            glam::Vec2::new(MIDDLE - 20.0, MIDDLE - 12.0),
         ]
         .iter()
         .map(|utah| {
@@ -206,7 +216,7 @@ impl ApplicationHandler for App {
 
         let mut entities: Vec<Box<dyn Entity>> = vec![
             Box::new(HelloTriangle::new((
-                GlPosition::new(3.0, HEIGHT as f32 + 1.0, 3.0),
+                GlPosition::new(MIDDLE + 3.0, HEIGHT as f32 + 1.0, MIDDLE + 3.0),
                 CS,
             ))),
             Box::new(TexCube::new(
@@ -221,7 +231,7 @@ impl ApplicationHandler for App {
             entities.push(utah);
         }
 
-        let mut sun = Sun::new(GlPosition::new(3.0, 10.0, 3.0));
+        let mut sun = Sun::new(GlPosition::new(MIDDLE, HEIGHT as f32 + 10.0, MIDDLE));
 
         let dimensions = self
             .renderer
@@ -233,11 +243,14 @@ impl ApplicationHandler for App {
 
         let entities_transformations_3d = Mat3DUpdate::default_from_dimensions(&dimensions);
 
+        let init_uniforms: Vec<Box<dyn Uniform>> =
+            vec![Box::new(Lighting::new()), Box::new(Fog::new(CLEAR_COLOR))];
+
         // Init Glsl for drawables
         for entity in entities.iter_mut() {
-            entity.init(gl_fns.clone(), entities_transformations_3d);
+            entity.init(gl_fns.clone(), entities_transformations_3d, &init_uniforms);
         }
-        sun.init(gl_fns, entities_transformations_3d);
+        sun.init(gl_fns, entities_transformations_3d, &init_uniforms);
 
         assert!(
             self.state
@@ -246,7 +259,7 @@ impl ApplicationHandler for App {
                     entities,
                     gl_surface,
                     window,
-                    camera: Camera::default(),
+                    camera: Camera::from_pos(GlPosition::new(MIDDLE, HEIGHT as f32 + 1.0, MIDDLE)),
                     sun,
                 })
                 .is_none()
@@ -392,9 +405,18 @@ impl ApplicationHandler for App {
                 ..Default::default()
             };
 
+            let to_set_uniforms: Vec<Box<dyn Uniform>> = vec![
+                Box::new(LightPos::new(sun.get_pos())),
+                Box::new(EyePos::new(camera.pos)),
+            ];
+
             renderer.clear();
-            renderer.draw(renderer_refs, mat3d, Some(sun.get_pos()), Some(camera.pos));
-            renderer.draw([sun as &mut dyn GlslPass].into_iter(), mat3d, None, None);
+            renderer.draw(renderer_refs, mat3d, &to_set_uniforms);
+            renderer.draw(
+                [sun as &mut dyn GlslPass].into_iter(),
+                mat3d,
+                &to_set_uniforms,
+            );
 
             window.request_redraw();
 
