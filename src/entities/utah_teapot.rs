@@ -244,6 +244,9 @@ void main() {
 const FRAGMENT_SHADER_SOURCE: &[u8] = b"
 #version 410 core
 
+layout(location = 0) out vec4 FragColor;
+
+
 uniform vec3 uColor;
 
 uniform vec3 uLightPos;
@@ -253,33 +256,42 @@ uniform float uFogNear;
 uniform float uFogFar;
 uniform vec3 uFogColor;
 
+uniform bool uEnabledLighting;
+
 uniform float uAmbientStrenght;
 uniform float uSpecularStrength;
 
-layout(location = 0) out vec4 FragColor;
 
 in vec3 fragNorm;
 in vec3 fragPos;
 
+
+
 void main() {
-    vec3 norm = normalize(fragNorm);
-
-    vec3 lightDir = normalize(uLightPos - fragPos);
-    float diffuse = max(dot(norm, lightDir), 0.0);
-
-    vec3 viewDir = normalize(uEyePos - fragPos);
-    vec3 reflectDir = reflect(-lightDir, norm);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-    vec3 specular = uSpecularStrength * spec * vec3(1.0, 1.0, 1.0);
-
+    vec3 finalRgb;
     vec4 albedo = vec4(uColor, 1.0);
-    vec3 sceneColor = albedo.rgb * (uAmbientStrenght + diffuse + specular);
 
-    float d = length(uEyePos - fragPos);
-    float f = clamp((uFogFar - d) / (uFogFar - uFogNear), 0.0, 1.0);
+    if (uEnabledLighting) {
+        vec3 norm = normalize(fragNorm);
 
-    vec3 finalRgb = mix(uFogColor, sceneColor, f);
+        vec3 lightDir = normalize(uLightPos - fragPos);
+        float diffuse = max(dot(norm, lightDir), 0.0);
 
+        vec3 viewDir = normalize(uEyePos - fragPos);
+        vec3 reflectDir = reflect(-lightDir, norm);
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+        vec3 specular = uSpecularStrength * spec * vec3(1.0, 1.0, 1.0);
+
+        vec3 sceneColor = albedo.rgb * (uAmbientStrenght + diffuse + specular);
+
+        float d = length(uEyePos - fragPos);
+        float f = clamp((uFogFar - d) / (uFogFar - uFogNear), 0.0, 1.0);
+
+        finalRgb = mix(uFogColor, sceneColor, f);
+    } else {
+        finalRgb = albedo.rgb;
+    }
+    
     FragColor = vec4(finalRgb, 1.0);
 
 }

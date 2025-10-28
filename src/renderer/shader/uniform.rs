@@ -16,7 +16,7 @@ impl Fog {
     pub fn new(clear_color: glam::Vec3) -> Self {
         Self {
             fog_near: 1.0,
-            fog_far: 50.0,
+            fog_far: 20.0,
             fog_color: clear_color,
         }
     }
@@ -57,7 +57,7 @@ impl Lighting {
     pub unsafe fn set_uniforms(&self, gl_fns: &Gles2, program: u32) {
         // Ligthing uniforms
         let ambient_loc =
-            gl_fns.GetUniformLocation(program, c"uAmbientStrenght".as_ptr() as *const _);
+            gl_fns.GetUniformLocation(program, c"uAmbientStrength".as_ptr() as *const _);
         gl_fns.Uniform1f(ambient_loc, self.ambient_strenght);
 
         let specular_loc =
@@ -129,6 +129,34 @@ impl EyePos {
 }
 
 impl Uniform for EyePos {
+    fn set(&self, gl: &Gles2, program: ShaderProgram) {
+        unsafe {
+            self.set_uniforms(gl, program);
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct EnabledLighting {
+    enabled: bool,
+}
+
+impl EnabledLighting {
+    /// # Safety
+    /// Unsafe bacuse we are calling ffi!
+    pub unsafe fn set_uniforms(&self, gl_fns: &Gles2, program: u32) {
+        // Eye pos uniform
+        let enabled_light_loc =
+            gl_fns.GetUniformLocation(program, c"uEnabledLighting".as_ptr() as *const _);
+        gl_fns.Uniform1ui(enabled_light_loc, if self.enabled { 1 } else { 0 });
+    }
+
+    pub fn enabled() -> Self {
+        Self { enabled: true }
+    }
+}
+
+impl Uniform for EnabledLighting {
     fn set(&self, gl: &Gles2, program: ShaderProgram) {
         unsafe {
             self.set_uniforms(gl, program);

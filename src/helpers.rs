@@ -1,5 +1,7 @@
 use std::time::{Duration, Instant};
 
+use winit::keyboard::KeyCode;
+
 use crate::gl::{self, Gles2};
 
 pub type GlPosition = glam::Vec3;
@@ -98,6 +100,25 @@ impl Default for FpsCounter {
             last: Instant::now(),
             acc: Duration::ZERO,
             frames: 0,
+        }
+    }
+}
+
+pub enum RendererControl {
+    EnableLight,
+    DisableLight,
+    EnableFog,
+    DisableFog,
+}
+
+impl RendererControl {
+    pub fn from_keycode(value: KeyCode) -> Option<Self> {
+        match value {
+            KeyCode::KeyL => Some(Self::EnableLight),
+            KeyCode::KeyO => Some(Self::DisableLight),
+            KeyCode::KeyF => Some(Self::EnableFog),
+            KeyCode::KeyC => Some(Self::DisableFog),
+            _ => None,
         }
     }
 }

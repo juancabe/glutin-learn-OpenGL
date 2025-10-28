@@ -34,9 +34,9 @@ use crate::entities::tex_cube::TexCube;
 use crate::entities::utah_teapot::UtahTeapot;
 // use crate::entities::utah_teapot::UtahTeapot;
 use crate::gl::{self};
-use crate::helpers::{FpsCounter, GlPosition, Mat3DUpdate};
+use crate::helpers::{FpsCounter, GlPosition, Mat3DUpdate, RendererControl};
 use crate::renderer::shader::GlslPass;
-use crate::renderer::shader::uniform::{EyePos, Fog, LightPos, Lighting, Uniform};
+use crate::renderer::shader::uniform::{EnabledLighting, EyePos, Fog, LightPos, Lighting, Uniform};
 use crate::terrain_builder;
 use crate::{GlDisplayCreationState, renderer::Renderer, window_attributes};
 use glutin::surface::{Surface, SwapInterval, WindowSurface};
@@ -56,6 +56,7 @@ struct AppState {
     // raw-window-handle.
     window: Window,
     entities: Vec<Box<dyn Entity>>,
+    next_frame_entities_uniforms: Vec<Box<dyn Uniform>>,
     sun: Sun,
     camera: Camera,
     last_frame: Instant,
@@ -179,7 +180,7 @@ impl ApplicationHandler for App {
             log::error!("Error setting vsync: {res:?}");
         }
 
-        const FLOOR_SIDE: usize = 100;
+        const FLOOR_SIDE: usize = 50;
         const HEIGHT: usize = 4;
         const CS: f32 = 1.0;
 
@@ -197,9 +198,9 @@ impl ApplicationHandler for App {
         const MIDDLE: f32 = FLOOR_SIDE as f32 * CS / 2.0;
 
         let utahs: Vec<Box<UtahTeapot>> = [
-            glam::Vec2::new(10.0 + MIDDLE, 15.0 + MIDDLE),
+            glam::Vec2::new(3.0 + MIDDLE, 5.0 + MIDDLE),
             glam::Vec2::new(MIDDLE - 5.0, MIDDLE + 2.0),
-            glam::Vec2::new(MIDDLE - 20.0, MIDDLE - 12.0),
+            glam::Vec2::new(MIDDLE, MIDDLE),
         ]
         .iter()
         .map(|utah| {
@@ -243,14 +244,17 @@ impl ApplicationHandler for App {
 
         let entities_transformations_3d = Mat3DUpdate::default_from_dimensions(&dimensions);
 
-        let init_uniforms: Vec<Box<dyn Uniform>> =
-            vec![Box::new(Lighting::new()), Box::new(Fog::new(CLEAR_COLOR))];
+        let init_uniforms: Vec<Box<dyn Uniform>> = vec![
+            Box::new(Lighting::new()),
+            Box::new(Fog::new(CLEAR_COLOR)),
+            Box::new(EnabledLighting::enabled()),
+        ];
 
         // Init Glsl for drawables
         for entity in entities.iter_mut() {
             entity.init(gl_fns.clone(), entities_transformations_3d, &init_uniforms);
         }
-        sun.init(gl_fns, entities_transformations_3d, &init_uniforms);
+        sun.init(gl_fns, entities_transformations_3d, &[]);
 
         assert!(
             self.state
@@ -261,6 +265,7 @@ impl ApplicationHandler for App {
                     window,
                     camera: Camera::from_pos(GlPosition::new(MIDDLE, HEIGHT as f32 + 1.0, MIDDLE)),
                     sun,
+                    next_frame_entities_uniforms: vec![]
                 })
                 .is_none()
         );
@@ -342,16 +347,26 @@ impl ApplicationHandler for App {
                         ..
                     },
                 ..
-            } => {
-                if let Some(state) = self.state.as_mut()
-                    && let Some(movement) = CameraMovement::from_keycode(code)
-                {
-                    match key_state {
-                        ElementState::Pressed => state.camera.want_move(movement),
-                        ElementState::Released => state.camera.stop_move(movement),
+            } => match self.state.as_mut() {
+                Some(state) => {
+                    if let Some(movement) = CameraMovement::from_keycode(code) {
+                        match key_state {
+                            ElementState::Pressed => state.camera.want_move(movement),
+                            ElementState::Released => state.camera.stop_move(movement),
+                        }
+                    }
+                    if let Some(control) = RendererControl::from_keycode(code) {
+                        let uniform = Box::new(match control {
+                            RendererControl::EnableLight => EnabledLighting::enabled(),
+                            RendererControl::DisableLight => EnabledLighting::default(),
+                            RendererControl::EnableFog => todo!(),
+                            RendererControl::DisableFog => todo!(),
+                        });
+                        state.next_frame_entities_uniforms.push(uniform);
                     }
                 }
-            }
+                None => log::warn!("Key pressed before state init"),
+            },
 
             _ => (),
         }
@@ -382,6 +397,7 @@ impl ApplicationHandler for App {
             entities,
             camera,
             sun,
+            next_frame_entities_uniforms,
         }) = self.state.as_mut()
         {
             let renderer = self.renderer.as_mut().unwrap();
@@ -405,18 +421,21 @@ impl ApplicationHandler for App {
                 ..Default::default()
             };
 
-            let to_set_uniforms: Vec<Box<dyn Uniform>> = vec![
-                Box::new(LightPos::new(sun.get_pos())),
+            let base_frame_update_uniforms = [
+                Box::new(LightPos::new(sun.get_pos())) as Box<dyn Uniform>,
                 Box::new(EyePos::new(camera.pos)),
             ];
 
             renderer.clear();
-            renderer.draw(renderer_refs, mat3d, &to_set_uniforms);
             renderer.draw(
                 [sun as &mut dyn GlslPass].into_iter(),
                 mat3d,
-                &to_set_uniforms,
+                &base_frame_update_uniforms,
             );
+            next_frame_entities_uniforms.extend(base_frame_update_uniforms);
+            renderer.draw(renderer_refs, mat3d, next_frame_entities_uniforms);
+
+            next_frame_entities_uniforms.clear();
 
             window.request_redraw();
 

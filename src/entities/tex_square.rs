@@ -340,6 +340,9 @@ const FRAGMENT_SHADER_SOURCE: &[u8] = b"
 
 layout(location = 0) out vec4 FragColor;
 
+
+uniform sampler2D tex;
+
 uniform vec3 uLightPos;
 uniform vec3 uEyePos;
 
@@ -347,34 +350,44 @@ uniform float uFogNear;
 uniform float uFogFar;
 uniform vec3 uFogColor;
 
-uniform float uAmbientStrenght;
+uniform bool uEnabledLighting;
+
+uniform float uAmbientStrength;
 uniform float uSpecularStrength;
 
-in vec2 TexCoord;
+
 in vec3 fragNorm;
 in vec3 fragPos;
 
-uniform sampler2D tex;
+in vec2 TexCoord;
 
 void main() {
-    vec3 norm = normalize(fragNorm);
 
-    vec3 lightDir = normalize(uLightPos - fragPos);
-    float diffuse = max(dot(norm, lightDir), 0.0);
-
-    vec3 viewDir = normalize(uEyePos - fragPos);
-    vec3 reflectDir = reflect(-lightDir, norm);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-    float specular = uSpecularStrength * spec;
-
+    vec3 finalRgb;
     vec4 albedo = texture(tex, TexCoord);
-    vec3 sceneColor = albedo.rgb * (uAmbientStrenght + diffuse + specular);
+
+    if (uEnabledLighting) {
+        vec3 norm = normalize(fragNorm);
+
+        vec3 lightDir = normalize(uLightPos - fragPos);
+        float diffuse = max(dot(norm, lightDir), 0.0);
+
+        vec3 viewDir = normalize(uEyePos - fragPos);
+        vec3 reflectDir = reflect(-lightDir, norm);
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
+        float specular = uSpecularStrength * spec;
+
+        vec3 sceneColor = albedo.rgb * (uAmbientStrength + diffuse + specular);
+        
+        float d = length(uEyePos - fragPos);
+        float f = clamp((uFogFar - d) / (uFogFar - uFogNear), 0.0, 1.0);
+
+        finalRgb = mix(uFogColor, sceneColor, f);
+    } else {
+        finalRgb = albedo.rgb;
+    }
     
-    float d = length(uEyePos - fragPos);
-    float f = clamp((uFogFar - d) / (uFogFar - uFogNear), 0.0, 1.0);
-
-    vec3 finalRgb = mix(uFogColor, sceneColor, f);
-
     FragColor = vec4(finalRgb, 1.0);
+
 }
 \0";
