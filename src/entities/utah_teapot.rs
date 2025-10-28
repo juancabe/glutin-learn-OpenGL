@@ -257,8 +257,9 @@ uniform float uFogFar;
 uniform vec3 uFogColor;
 
 uniform bool uEnabledLighting;
+uniform bool uEnabledFog;
 
-uniform float uAmbientStrenght;
+uniform float uAmbientStrength;
 uniform float uSpecularStrength;
 
 
@@ -268,8 +269,8 @@ in vec3 fragPos;
 
 
 void main() {
-    vec3 finalRgb;
     vec4 albedo = vec4(uColor, 1.0);
+    vec3 finalRgb = albedo.rgb;
 
     if (uEnabledLighting) {
         vec3 norm = normalize(fragNorm);
@@ -280,17 +281,18 @@ void main() {
         vec3 viewDir = normalize(uEyePos - fragPos);
         vec3 reflectDir = reflect(-lightDir, norm);
         float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-        vec3 specular = uSpecularStrength * spec * vec3(1.0, 1.0, 1.0);
+        float specular = uSpecularStrength * spec;
 
-        vec3 sceneColor = albedo.rgb * (uAmbientStrenght + diffuse + specular);
+        finalRgb = finalRgb * (uAmbientStrength + diffuse + specular);
+    }
 
+    if (uEnabledFog) {
         float d = length(uEyePos - fragPos);
         float f = clamp((uFogFar - d) / (uFogFar - uFogNear), 0.0, 1.0);
 
-        finalRgb = mix(uFogColor, sceneColor, f);
-    } else {
-        finalRgb = albedo.rgb;
+        finalRgb = mix(uFogColor, finalRgb, f);
     }
+    
     
     FragColor = vec4(finalRgb, 1.0);
 

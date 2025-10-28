@@ -163,3 +163,31 @@ impl Uniform for EnabledLighting {
         }
     }
 }
+
+#[derive(Default)]
+pub struct EnabledFog {
+    enabled: bool,
+}
+
+impl EnabledFog {
+    /// # Safety
+    /// Unsafe bacuse we are calling ffi!
+    pub unsafe fn set_uniforms(&self, gl_fns: &Gles2, program: u32) {
+        // Eye pos uniform
+        let enabled_fog_loc =
+            gl_fns.GetUniformLocation(program, c"uEnabledFog".as_ptr() as *const _);
+        gl_fns.Uniform1ui(enabled_fog_loc, if self.enabled { 1 } else { 0 });
+    }
+
+    pub fn enabled() -> Self {
+        Self { enabled: true }
+    }
+}
+
+impl Uniform for EnabledFog {
+    fn set(&self, gl: &Gles2, program: ShaderProgram) {
+        unsafe {
+            self.set_uniforms(gl, program);
+        }
+    }
+}

@@ -36,7 +36,9 @@ use crate::entities::utah_teapot::UtahTeapot;
 use crate::gl::{self};
 use crate::helpers::{FpsCounter, GlPosition, Mat3DUpdate, RendererControl};
 use crate::renderer::shader::GlslPass;
-use crate::renderer::shader::uniform::{EnabledLighting, EyePos, Fog, LightPos, Lighting, Uniform};
+use crate::renderer::shader::uniform::{
+    EnabledFog, EnabledLighting, EyePos, Fog, LightPos, Lighting, Uniform,
+};
 use crate::terrain_builder;
 use crate::{GlDisplayCreationState, renderer::Renderer, window_attributes};
 use glutin::surface::{Surface, SwapInterval, WindowSurface};
@@ -247,6 +249,7 @@ impl ApplicationHandler for App {
         let init_uniforms: Vec<Box<dyn Uniform>> = vec![
             Box::new(Lighting::new()),
             Box::new(Fog::new(CLEAR_COLOR)),
+            Box::new(EnabledFog::enabled()),
             Box::new(EnabledLighting::enabled()),
         ];
 
@@ -356,12 +359,12 @@ impl ApplicationHandler for App {
                         }
                     }
                     if let Some(control) = RendererControl::from_keycode(code) {
-                        let uniform = Box::new(match control {
-                            RendererControl::EnableLight => EnabledLighting::enabled(),
-                            RendererControl::DisableLight => EnabledLighting::default(),
-                            RendererControl::EnableFog => todo!(),
-                            RendererControl::DisableFog => todo!(),
-                        });
+                        let uniform: Box<dyn Uniform> = match control {
+                            RendererControl::EnableLight => Box::new(EnabledLighting::enabled()),
+                            RendererControl::DisableLight => Box::new(EnabledLighting::default()),
+                            RendererControl::EnableFog => Box::new(EnabledFog::enabled()),
+                            RendererControl::DisableFog => Box::new(EnabledFog::default()),
+                        };
                         state.next_frame_entities_uniforms.push(uniform);
                     }
                 }
